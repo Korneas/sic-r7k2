@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex, nofollow, noarchive">
+  <meta name="color-scheme" content="light dark">
+  <title>sic · Oportunidades en Cali</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&display=swap">
+  <link rel="stylesheet" href="https://api.mapbox.com/mapbox-gl-js/v3.9.4/mapbox-gl.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip" href="#list">Saltar a los resultados</a>
+
+  <header class="top">
+    <a class="brand" href="./" aria-label="sic, inicio">
+      <svg class="brand-mark" viewBox="0 0 20 20" aria-hidden="true"><rect x="1" y="11" width="4" height="8" rx="1"/><rect x="8" y="6" width="4" height="13" rx="1"/><rect x="15" y="1" width="4" height="18" rx="1"/></svg>
+      <span class="brand-name">sic</span>
+      <span class="brand-sub">Oportunidades de compra en Cali</span>
+    </a>
+    <p class="fixture" id="fixture" hidden>Datos de prueba</p>
+    <p class="updated" id="updated"></p>
+  </header>
+
+  <nav class="filters" aria-label="Filtros">
+    <div class="chips" id="chips"></div>
+  </nav>
+
+  <main class="explore" id="explore">
+    <section class="sheet" id="sheet" aria-label="Resultados">
+      <div class="sheet-handle" id="sheetHandle" aria-hidden="true"><span></span></div>
+      <div class="list-head">
+        <p class="count" id="count" aria-live="polite">Cargando ofertas…</p>
+        <label class="sort">
+          <span>Ordenar</span>
+          <select id="sort">
+            <option value="score">Puntaje</option>
+            <option value="disc">Descuento</option>
+            <option value="up">Upside</option>
+            <option value="price">Precio más bajo</option>
+            <option value="pm">Precio/m² más bajo</option>
+            <option value="new">Más nuevas</option>
+          </select>
+        </label>
+      </div>
+      <div class="list-scroll" id="listScroll">
+        <ol class="list" id="list" tabindex="-1"></ol>
+        <div class="empty" id="empty" hidden></div>
+        <div class="sentinel" id="sentinel" aria-hidden="true"></div>
+      </div>
+    </section>
+
+    <div class="map-wrap" id="mapWrap">
+      <div id="map" role="region" aria-label="Mapa de ofertas"></div>
+      <label class="area-toggle">
+        <input type="checkbox" id="areaToggle" checked>
+        <span>Buscar en esta área</span>
+      </label>
+      <div class="legend" aria-label="Escala de puntaje">
+        <span class="legend-title">Puntaje</span>
+        <span class="lg s0">&lt;40</span><span class="lg s1">40</span><span class="lg s2">55</span><span class="lg s3">70</span><span class="lg s4">85+</span><span class="lg sn">sin</span>
+      </div>
+    </div>
+
+    <aside class="detail" id="detail" hidden aria-labelledby="dTitle" tabindex="-1">
+      <div class="detail-bar">
+        <button class="icon-btn" id="detailClose" type="button" aria-label="Cerrar detalle">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5l10 10M15 5L5 15"/></svg>
+        </button>
+        <span class="detail-bar-title" id="detailBarTitle"></span>
+        <button class="fav fav-lg" id="detailFav" type="button" aria-pressed="false" aria-label="Guardar en favoritos">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 17s-6.5-3.9-6.5-8.6A3.6 3.6 0 0 1 10 6a3.6 3.6 0 0 1 6.5 2.4C16.5 13.1 10 17 10 17z"/></svg>
+        </button>
+      </div>
+      <div class="detail-body" id="detailBody"></div>
+    </aside>
+  </main>
+
+  <button class="view-toggle" id="viewToggle" type="button">Lista</button>
+  <div class="popover" id="popover" hidden role="dialog" aria-modal="false"></div>
+  <div class="tip" id="tip" role="tooltip" hidden></div>
+
+  <script src="https://api.mapbox.com/mapbox-gl-js/v3.9.4/mapbox-gl.js"></script>
+  <script src="config.js"></script>
+  <script src="md5.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
