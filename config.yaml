@@ -39,6 +39,9 @@ scraping:
   incremental_stop_after_known_pages: 2
   user_agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36"
 
+# T16: dHash de las primeras fotos de pares ambiguos (scraper/photohash.py); presupuesto de descargas por corrida
+dedupe: { photo_budget: 1500, photo_n: 3, workers: 4, timeout: 8 }
+
 score:
   weights: { c1_discount: 0.35, c2_upside: 0.25, c3_zone: 0.15, c4_amenities: 0.15, c5_liquidity: 0.10 }
   comps: { k_min: 8, k_max: 20, radii_m: [800, 1500], area_tol: 0.30, stratum_tol: 1, max_age_days: 90, per_location: 2, loc_m: 15, new_build_age: 8 }

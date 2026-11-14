@@ -93,6 +93,60 @@ def main():
         dedupe.run(conn)
         assert g("fr-21") == "fr-20"
 
+        # ---- T16: fotos (hashes sintéticos inyectados en photo_hash, sin red) ----
+        NOPH = {"dedupe": {"photo_budget": 0}}
+        H1, H2, H3, H4 = 0x0F0F0F0F0F0F0F0F, 0xF0F0F0F0F0F0F0F0, 0x00FF00FF00FF00FF, 0x123456789ABCDEF0
+        flip = lambda h, n: h ^ ((1 << n) - 1)  # n bits distintos
+        # a) aproximada +4%/+4% (la regla ±2% la rechaza): una foto idéntica la agrupa
+        # b) aproximada +1% que sí agrupa sin fotos, pero con fotos todas distintas (≥2 c/u) se separa
+        # c) igual que (a) pero sin hashes: no agrupa (control)
+        # d) republicada mismo portal, precio +8%, área +8%, con foto compartida (flip 3 bits) → agrupa
+        # e) republicada +8% sin hashes → no agrupa
+        db.upsert(conn, [
+            rec("70", price=500_000_000, area=100, lat=None, lng=None, hood="Pance", bedrooms=6),
+            rec("70", source="metrocuadrado", price=520_000_000, area=104, lat=None, lng=None, hood="pance", bedrooms=6),
+            rec("71", price=500_000_000, area=100, lat=None, lng=None, hood="Bochalema", bedrooms=7),
+            rec("71", source="metrocuadrado", price=505_000_000, area=101, lat=None, lng=None, hood="Bochalema", bedrooms=7),
+            rec("72", price=500_000_000, area=100, lat=None, lng=None, hood="Pance", bedrooms=8),
+            rec("72", source="metrocuadrado", price=520_000_000, area=104, lat=None, lng=None, hood="pance", bedrooms=8),
+            rec("80", price=500_000_000, area=100, lat=3.41, lng=-76.52, hood="Z", bedrooms=9),
+            rec("82", price=500_000_000, area=100, lat=3.42, lng=-76.52, hood="Z2", bedrooms=10),
+        ], T3)
+        db.upsert(conn, [rec("81", price=540_000_000, area=108, lat=3.41, lng=-76.52, hood="Z", bedrooms=9),
+                         rec("83", price=540_000_000, area=108, lat=3.42, lng=-76.52, hood="Z2", bedrooms=10)], T4)
+        db.mark_missing(conn, "fincaraiz", ["81", "83"], "full", T4, {"removed_after_missed_full_runs": 1})
+        ph = lambda lid, hs: conn.executemany("INSERT INTO photo_hash VALUES (?,?,?,?,?)", [
+            (lid, i, f"u{lid}{i}", h - (1 << 64) if h >= 1 << 63 else h, T4) for i, h in enumerate(hs)])
+        ph("fr-70", [H1, H2]); ph("m2-70", [H3, flip(H1, 3)])
+        ph("fr-71", [H1, H2]); ph("m2-71", [H3, H4])
+        ph("fr-80", [H1, H2]); ph("fr-81", [flip(H2, 2), H4])
+        conn.commit()
+        dedupe.run(conn, NOPH)
+        assert g("fr-70") == g("m2-70"), (g("fr-70"), g("m2-70"))      # foto compartida anula el ±2%
+        assert g("fr-71") != g("m2-71")                                 # fotos distintas separan un par que agrupaba
+        assert g("fr-72") != g("m2-72")                                 # control sin hashes: +4% no agrupa
+        assert g("fr-80") == g("fr-81")                                 # republicada +8% con foto compartida
+        assert g("fr-82") != g("fr-83")                                 # republicada +8% sin evidencia: no agrupa
+        # el filtro de hashes genéricos: el mismo hash en > 8 ofertas se ignora
+        from scraper import photohash
+        assert 0 not in photohash.load_hashes(conn)
+        # dHash offline: redimensionada ≈ misma; otra imagen, lejos
+        from PIL import Image, ImageDraw
+        def synth(seed, size=(320, 240)):
+            r = random.Random(seed)
+            im = Image.new("RGB", size, (r.randint(0, 255),) * 3)
+            dr = ImageDraw.Draw(im)
+            for _ in range(25):
+                x, y = r.randint(0, size[0]), r.randint(0, size[1])
+                dr.ellipse([x, y, x + r.randint(20, 120), y + r.randint(20, 120)], fill=tuple(r.randint(0, 255) for _ in range(3)))
+            return im
+        im = synth(1)
+        d_same = photohash.hamming(photohash.dhash_image(im), photohash.dhash_image(im.resize((200, 150))))
+        d_diff = photohash.hamming(photohash.dhash_image(im), photohash.dhash_image(synth(2)))
+        assert d_same <= 6, d_same
+        assert d_diff > 12, d_diff
+        print(f"dHash: misma {d_same} bits, distinta {d_diff} bits")
+
         # escala: 25k ofertas sintéticas
         rnd = random.Random(1)
         rows = []

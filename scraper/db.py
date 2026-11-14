@@ -40,6 +40,10 @@ CREATE TABLE IF NOT EXISTS zone_stats (
     gross_yield REAL, median_dom REAL, absorption REAL,
     PRIMARY KEY (barrio_code, date, type)
 );
+CREATE TABLE IF NOT EXISTS photo_hash (
+    listing_id TEXT, idx INTEGER, url TEXT, hash INTEGER, fetched_at TEXT,
+    PRIMARY KEY (listing_id, url)
+);
 CREATE TABLE IF NOT EXISTS run (
     id INTEGER PRIMARY KEY AUTOINCREMENT, started_at TEXT, mode TEXT, source TEXT,
     fetched INTEGER, requests INTEGER, new INTEGER, updated INTEGER, removed INTEGER,

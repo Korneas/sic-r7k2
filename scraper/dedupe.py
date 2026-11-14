@@ -57,45 +57,114 @@ def _differs(x, y):
     return x is not None and y is not None and x != y
 
 
+SAME_DIST, DIFF_DIST = 6, 12   # Hamming dHash: foto compartida (≤6) / ninguna foto parecida (>12)
+REPOST_TOL = 0.10              # republicada (mismo portal, una retirada) con foto compartida: precio/área ±10%
+GENERIC_HASH = 8               # un hash que aparece en > 8 ofertas es logo/plano genérico: se ignora
+
+
+def _pop(x):
+    return bin(x).count("1")
+
+
+def _photo_ev(a, b):
+    """'same' si comparten alguna foto (dHash ≤ SAME_DIST); 'diff' si ambas tienen ≥2 fotos con hash y ninguna
+    se parece (> DIFF_DIST); None si no hay evidencia."""
+    pa, pb = a.get("_ph") or (), b.get("_ph") or ()
+    if not pa or not pb:
+        return None
+    d = min(_pop(x ^ y) for x in pa for y in pb)
+    if d <= SAME_DIST:
+        return "same"
+    if len(pa) >= 2 and len(pb) >= 2 and d > DIFF_DIST:
+        return "diff"
+    return None
+
+
+def _hard(a, b):
+    """Reglas duras sin tolerancias: estrato, baños y ventana de republicación."""
+    return (_differs(a["stratum_portal"], b["stratum_portal"]) or _differs(a["bathrooms"], b["bathrooms"])
+            or not (_alive_for(a, b) and _alive_for(b, a)))
+
+
+def _exact_ok(a, b, dp, da, ptol, atol):
+    if dp > ptol or (da is not None and abs(a["area_m2"] - b["area_m2"]) > max(AREA_ABS, atol * max(a["area_m2"], b["area_m2"]))):
+        return False
+    return _meters(a, b) < MAX_DIST_M
+
+
+def _repost_pair(a, b):
+    return a["source"] == b["source"] and (a["status"] == "active") != (b["status"] == "active")
+
+
 def match(a, b):
     """a, b en la misma cubeta (operación, tipo, habitaciones) y con precio. Devuelve un costo (menor = más
-    parecidas) o None si no son la misma propiedad."""
-    if _differs(a["stratum_portal"], b["stratum_portal"]) or _differs(a["bathrooms"], b["bathrooms"]):
+    parecidas) o None si no son la misma propiedad. Evidencia de fotos (`_ph`): 'same' relaja la regla estricta
+    de ubicación aproximada y habilita republicadas con cambios ≤10%; 'diff' veta el par."""
+    if _hard(a, b):
         return None
-    if not (_alive_for(a, b) and _alive_for(b, a)):
+    ev = _photo_ev(a, b)
+    if ev == "diff":
         return None
+    same = ev == "same"
     dp = _rel(a["price"], b["price"])
     aa, ab = a["area_m2"], b["area_m2"]
     da = _rel(aa, ab) if aa and ab else None
+    repost = same and _repost_pair(a, b)
+    ptol, atol = (REPOST_TOL, REPOST_TOL) if repost else (PRICE_TOL, AREA_TOL)
     if a["source"] == b["source"] and a["status"] == b["status"] == "active":
         # mismo portal, ambas vigentes: lo normal es que sean unidades distintas del mismo edificio
-        if da is None or dp > SAME_SOURCE_TOL or da > SAME_SOURCE_TOL:
+        if same:
+            if da is None or dp > PRICE_TOL or da > AREA_TOL:
+                return None
+        elif da is None or dp > SAME_SOURCE_TOL or da > SAME_SOURCE_TOL:
             return None
+    bonus = 0.02 if same else 0.0
     if a["geo_precision"] == "exact" and b["geo_precision"] == "exact":
-        if dp > PRICE_TOL or (da is not None and abs(aa - ab) > max(AREA_ABS, AREA_TOL * max(aa, ab))):
+        if not _exact_ok(a, b, dp, da, ptol, atol):
             return None
-        dist = _meters(a, b)
-        if dist >= MAX_DIST_M:
-            return None
-        return dp + (da or AREA_TOL) + dist / MAX_DIST_M * 0.05
-    # alguna aproximada: mismo barrio y todo más estricto
+        return dp + (da or AREA_TOL) + _meters(a, b) / MAX_DIST_M * 0.05 - bonus
+    # alguna aproximada: mismo barrio y todo más estricto (salvo foto compartida: tolerancias normales)
     if da is None or not a["_hood"] or a["_hood"] != b["_hood"]:
         return None
     if a["stratum_portal"] is None or b["stratum_portal"] is None or _differs(a["parking"], b["parking"]):
         return None
-    if dp > PRICE_TOL_APPROX or da > AREA_TOL_APPROX:
+    tp, ta = (ptol, atol) if same else (PRICE_TOL_APPROX, AREA_TOL_APPROX)
+    if dp > tp or da > ta:
         return None
-    return dp + da + 0.05  # penaliza la falta de coordenada frente a un empate exacto
+    return dp + da + 0.05 - bonus  # penaliza la falta de coordenada frente a un empate exacto
 
 
-def _cluster(rows):
+def ambiguous(a, b):
+    """Par que pasa las compuertas básicas (ya mismo op/tipo/habs; precio y área ±5%) pero cuya decisión depende de
+    una regla débil: alguna ubicación aproximada (candidato a regla estricta ±2%), o republicada que solo un
+    cambio ≤10% separaría. Esos pares son los que vale la pena resolver con fotos."""
+    if _hard(a, b):
+        return False
+    dp = _rel(a["price"], b["price"])
+    aa, ab = a["area_m2"], b["area_m2"]
+    da = _rel(aa, ab) if aa and ab else None
+    both_exact = a["geo_precision"] == "exact" and b["geo_precision"] == "exact"
+    if _repost_pair(a, b) and dp <= REPOST_TOL and (da is None or da <= REPOST_TOL):
+        if both_exact:
+            return not _exact_ok(a, b, dp, da, PRICE_TOL, AREA_TOL) and _meters(a, b) < MAX_DIST_M
+        return da is not None and bool(a["_hood"]) and a["_hood"] == b["_hood"]
+    if both_exact or dp > PRICE_TOL or da is None or da > AREA_TOL:
+        return False
+    if a["source"] == b["source"] and a["status"] == b["status"] == "active" and (dp > SAME_SOURCE_TOL or da > SAME_SOURCE_TOL):
+        return False
+    return (bool(a["_hood"]) and a["_hood"] == b["_hood"] and a["stratum_portal"] is not None
+            and b["stratum_portal"] is not None and not _differs(a["parking"], b["parking"]))
+
+
+def _cluster(rows, amb=None):
     """rows: misma cubeta. Enlace completo aglomerativo: se unen los pares en orden de costo y dos grupos solo
     se fusionan si TODOS sus pares cruzados empatan, el tamaño no pasa de MAX_GROUP y ningún portal queda con
-    más de MAX_PER_SOURCE activas. Candidatos por ventana de precio ±5% (orden por precio)."""
+    más de MAX_PER_SOURCE activas. Candidatos por ventana de precio (orden por precio; ±10% por las republicadas).
+    `amb`: lista a la que se añaden los pares ambiguos (ids) y los rechazados por el tope por portal."""
     rows = sorted(rows, key=lambda r: r["price"])
     edges, ok = [], set()
     for i, a in enumerate(rows):
-        hi = a["price"] / (1 - PRICE_TOL)  # b ≤ hi  ⇔  b - a ≤ tol·b
+        hi = a["price"] / (1 - REPOST_TOL)  # b ≤ hi  ⇔  b - a ≤ tol·b
         for b in rows[i + 1:]:
             if b["price"] > hi:
                 break
@@ -104,6 +173,8 @@ def _cluster(rows):
                 edges.append((c, a["id"], b["id"]))
                 ok.add((a["id"], b["id"]))
                 ok.add((b["id"], a["id"]))
+            if amb is not None and ambiguous(a, b):
+                amb.append((a["id"], b["id"]))
     by_id = {r["id"]: r for r in rows}
     of = {r["id"]: [r["id"]] for r in rows}  # id -> lista compartida de miembros de su grupo
     rejected = 0
@@ -120,6 +191,8 @@ def _cluster(rows):
                 per[by_id[m]["source"]] += 1
         if max(per.values(), default=0) > MAX_PER_SOURCE:
             rejected += 1
+            if amb is not None:
+                amb.append((x, y))
             continue
         gx.extend(gy)
         for m in gy:
@@ -132,20 +205,23 @@ def _order(r):
     return (r["first_seen"] or "", r["id"])
 
 
-def group_rows(rows):
-    """Lista de dicts de listing -> ({id: group_id}, fusiones rechazadas). Puro (sin DB) para poder probarlo."""
+def group_rows(rows, ph=None, amb=None):
+    """Lista de dicts de listing -> ({id: group_id}, fusiones rechazadas). Puro (sin DB) para poder probarlo.
+    ph: {id: [hash dHash de sus primeras fotos]}; amb: lista donde se acumulan los pares ambiguos."""
+    ph = ph or {}
     buckets, out = defaultdict(list), {}
     for r in rows:
         h = norm(r["neighborhood_portal"])
         r["_hood"] = "" if h in NO_HOOD else h
         r["_first"], r["_removed"] = _ts(r["first_seen"]), _ts(r["removed_at"])
+        r["_ph"] = ph.get(r["id"], ())
         if r["price"] and r["operation"] and r["property_type"]:
             buckets[(r["operation"], r["property_type"], r["bedrooms"])].append(r)
         else:
             out[r["id"]] = r["id"]
     rejected = 0
     for rs in buckets.values():
-        groups, rej = _cluster(rs)
+        groups, rej = _cluster(rs, amb)
         rejected += rej
         for g in groups:
             gid = min(g, key=_order)["id"]
@@ -154,11 +230,37 @@ def group_rows(rows):
     return out, rejected
 
 
-def run(conn):
+def _load_cfg():
+    try:
+        import yaml
+        return yaml.safe_load(open("config.yaml", encoding="utf-8")) or {}
+    except Exception:
+        return {}
+
+
+def run(conn, cfg=None):
+    """Agrupa; los pares ambiguos se resuelven con dHash de fotos (scraper/photohash.py) dentro del presupuesto
+    `dedupe.photo_budget` de descargas por corrida. Sin red o sin Pillow cae al agrupamiento sin fotos."""
+    cfg = cfg if cfg is not None else _load_cfg()
     cur = conn.execute(f"SELECT {COLS} FROM listing")
     names = [d[0] for d in cur.description]
     rows = [dict(zip(names, r)) for r in cur]
-    groups, rejected = group_rows(rows)
+    ph, amb, pstats = {}, [], {}
+    try:
+        from scraper import photohash
+        conn.execute("SELECT 1 FROM photo_hash LIMIT 1")
+        ph = photohash.load_hashes(conn)
+        group_rows([dict(r) for r in rows], ph, amb)  # pasada 1: solo para detectar pares ambiguos
+        pairs = list(dict.fromkeys(amb))
+        pstats = photohash.hash_for_pairs(conn, pairs, cfg)
+        pstats["ambiguous"] = len(pairs)
+        if pstats.get("ok") or pstats.get("perm_fail"):
+            ph = photohash.load_hashes(conn)
+        print(f"[dedupe] fotos: {len(pairs)} pares ambiguos, {pstats.get('downloads', 0)} descargas "
+              f"({pstats.get('ok', 0)} ok, {pstats.get('perm_fail', 0)} def., {pstats.get('net_fail', 0)} red)")
+    except Exception as e:  # red, Pillow, tabla ausente...: se sigue sin fotos
+        print(f"[dedupe] fotos omitidas ({type(e).__name__}: {e})")
+    groups, rejected = group_rows(rows, ph)
     conn.executemany("UPDATE listing SET group_id=? WHERE id=?", [(g, i) for i, g in groups.items()])
     conn.commit()
     sizes = defaultdict(int)
@@ -173,7 +275,7 @@ def run(conn):
     print(f"[dedupe] {len(rows)} ofertas, {len(multi)} grupos de ≥2, {grouped} agrupadas ({pct:.1f}%), "
           f"tamaños {dict(sorted(hist.items()))}, {rejected} fusiones rechazadas (enlace completo/tope/portal)")
     return dict(listings=len(rows), groups=len(multi), grouped=grouped, pct=round(pct, 1),
-                sizes=dict(sorted(hist.items())), rejected=rejected)
+                sizes=dict(sorted(hist.items())), rejected=rejected, photos=pstats)
 
 
 def canonical_ids(conn, operation="sale"):
