@@ -1,0 +1,33 @@
+{
+ "generated_at": "2026-11-14T22:07:07Z",
+ "counts": {
+  "sale_active": 17652,
+  "rent_active": 2559,
+  "groups": 14119,
+  "exported": 14101,
+  "scored": 11988,
+  "no_coords": 18
+ },
+ "runs": [
+  {
+   "at": "2026-11-14T20:29:44Z",
+   "source": "m2",
+   "mode": "full",
+   "fetched": 9722,
+   "new": 9714,
+   "removed": 0,
+   "errors": 0,
+   "ok": true
+  },
+  {
+   "at": "2026-11-14T20:29:44Z",
+   "source": "fr",
+   "mode": "full",
+   "fetched": 10519,
+   "new": 10497,
+   "removed": 0,
+   "errors": 0,
+   "ok": true
+  }
+ ]
+}
