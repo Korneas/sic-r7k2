@@ -28,7 +28,8 @@ jobs:
       # la DB vive como asset del release "db" (se sobrescribe), no en el historial de git (PLAN §5.4)
       - name: bajar DB
         env: { GH_TOKEN: "${{ github.token }}" }
-        run: gh release download db -p sic.db.gz -D data && gunzip -f data/sic.db.gz || echo "sin DB previa: arranca vacía"
+        run: |
+          gh release download db -p sic.db.gz -D data && gunzip -f data/sic.db.gz || echo "sin DB previa, arranca vacía"
       - name: modo
         id: mode
         run: |
