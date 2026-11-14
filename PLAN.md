@@ -422,6 +422,7 @@ Alertas, multiusuario o login, sincronización de favoritos, otras ciudades, arr
 | Fecha | Fase | Nota |
 |---|---|---|
 | 2026-11-14 | Plan | Volumen medido: FR ~10.850 y M2 ~9.980 (estratos 2 a 6). WFS de IDESC verificado. datos.cali.gov.co caído |
+| 2026-11-14 | T2 ✅ | FR: tope de ~6.124 resultados por búsqueda, así que se parte por estrato (una URL por operación × tipo × estrato). Orden `ordenListado=3` (más recientes). Proyectos: `isProject`, `isProjectUnit`, `project` o `/proyectos-vivienda`. `pointType=True` es una coordenada geocodificada desde la dirección escrita y a veces cae lejos del barrio: se trata como aproximada, y T7 la contrasta con el polígono del barrio. Barrido completo ≈ 520 páginas |
 | 2026-11-14 | T6 ✅ | `dedupe.py`: buckets por operación, tipo y habitaciones, ventana de precio ±5%, union-find, republicadas ≤ 60 días, partición de grupos > 6. API `canonical_ids` y `group_first_seen`. 25k sintéticas en 0,3 s |
 | 2026-11-14 | T4 ✅ | `db.py`, `main.py` (full/incremental, drop guard, pipeline vía importlib), `check_upsert` ok. Pendiente: detección de republicadas (va a T6); VACUUM en el workflow (T12) |
 | 2026-11-14 | T1 ✅ | Esqueleto, `.venv` (uv, py3.12), `scraper/net.py` (Http), `docs/data-contract.md`. Repo `sic-r7k2` público. Arranca /loop |
@@ -444,7 +445,7 @@ Asignación de modelo: **opus** para tareas de diseño o algoritmos (puntaje, de
 | # | Tarea | Depende de | Modelo | Estado |
 |---|---|---|---|---|
 | T1 | Repo, estructura, `config.yaml`, `requirements.txt`, `.gitignore`, `vercel.json`, `docs/data-contract.md` | — | (orquestador) | ✅ |
-| T2 | Fuente Finca Raíz: Cali completa, venta y arriendo, estratos 2 a 6, sin proyectos, orden "recientes", límite de paginación | T1 | sonnet | ⬜ |
+| T2 | Fuente Finca Raíz: Cali completa, venta y arriendo, estratos 2 a 6, sin proyectos, orden "recientes", límite de paginación | T1 | sonnet | ✅ |
 | T3 | Fuente Metrocuadrado (ídem) | T1 | sonnet | ⬜ |
 | T4 | `db.py`: esquema SQLite, upsert, `price_change`, retiradas con protección, `run`; `main.py` en modos full e incremental; `check_upsert` | T1 | opus | ✅ |
 | T5 | `scripts/fetch_layers.py`: capas IDESC, Overpass, GTFS del MIO y `config/anchors.yaml` a `data/layers/` | T1 | sonnet | ⬜ |
