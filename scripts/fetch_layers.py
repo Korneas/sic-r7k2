@@ -13,7 +13,7 @@ import argparse, collections, csv, datetime as dt, io, json, math, re, sys, temp
 from pathlib import Path
 
 import httpx
-from shapely.geometry import mapping, shape
+from shapely.geometry import MultiPolygon, Polygon, mapping, shape
 from shapely.ops import polygonize, unary_union
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -100,6 +100,9 @@ WFS_LAYERS = {
     "inundacion_pluvial": ("pot_2014:amb_ari_inundacion_pluvial", ["tipo_amena"], {}),
     "inundacion_no_mitigable": ("expediente_municipal:emc_amb_ari_amenaza_no_mitigable_inundacion", ["tipo_amena", "amenaza_in"], {}),
     "movimientos_masa": ("pot_2014:amb_ari_movimientos_masa", None, {}),
+    # slope % (5 m raster polygonised); only >= 25% kept, as ladera proxy while movimientos_masa is down
+    "pendientes": ("pot_2014:bcs_pendientes_porcentaje", ["pend_porc", "id_pend"],
+                   {"keep": lambda p: int(p["id_pend"] or 0) >= 5, "dissolve": "pend_porc", "prune": (4e-6, 0.00012)}),
     "tratamientos": ("pot_2014:nur_tratamientos_urbanisticos", ["codigo", "tratamient"], {}),
     "plusvalia": ("pot_2014:nur_areas_generadoras_plusvalia", ["nombre", "tipo"], {}),
     "planes_parciales": ("emru:emru_pcp_planes_parciales", ["plan_parci"], {"dissolve": "plan_parci"}),
@@ -152,6 +155,8 @@ def fetch_wfs_layer(name):
         if not f["geometry"]:
             continue
         p = pick(f["properties"], spec)
+        if "keep" in extra and not extra["keep"](p):
+            continue
         if extra.get("post") == "hom":
             try:
                 if int(p["year"]) < MIN_HOM_YEAR:
@@ -166,10 +171,22 @@ def fetch_wfs_layer(name):
         if g:
             out.append({"type": "Feature", "geometry": g, "properties": p})
     for key, geoms in groups.items():
-        g = clean_geom(mapping(unary_union(geoms)), True)
+        u = unary_union(geoms)
+        if "prune" in extra:
+            u = prune(u, *extra["prune"])
+        g = clean_geom(mapping(u), True)
         if g:
-            out.append({"type": "Feature", "geometry": g, "properties": {"plan_parci": key}})
+            out.append({"type": "Feature", "geometry": g, "properties": {extra["dissolve"]: key}})
     return out
+
+
+def prune(g, min_area, tol):
+    """Drop polygon parts and holes smaller than min_area (deg²), then simplify (raster-derived layers)."""
+    out = []
+    for q in getattr(g, "geoms", [g]):
+        if q.geom_type == "Polygon" and q.area >= min_area:
+            out.append(Polygon(q.exterior, [h for h in q.interiors if Polygon(h).area >= min_area]))
+    return MultiPolygon(out).buffer(0).simplify(tol, preserve_topology=True)
 
 
 # ---------------------------------------------------------------- estrato

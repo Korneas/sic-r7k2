@@ -422,6 +422,7 @@ Alertas, multiusuario o login, sincronización de favoritos, otras ciudades, arr
 | Fecha | Fase | Nota |
 |---|---|---|
 | 2026-11-14 | Plan | Volumen medido: FR ~10.850 y M2 ~9.980 (estratos 2 a 6). WFS de IDESC verificado. datos.cali.gov.co caído |
+| 2026-11-14 | T7 ✅ | `geo.py`: 25k sintéticas en ~12 s (STRtree + kNN en numpy). El punto efectivo queda en `listing_geo.lat/lng`; la coordenada del portal no se toca, y un punto degradado guarda la original en `geo_note`. Estrato por manzana a ≤ 30 m y respaldo por barrio. Ladera: proxy de pendiente ≥ 25% (`pendientes.geojson`). Homicidios: ventana de 24 meses que termina en el último dato de la capa (2025-06). `check_geo` ok |
 | 2026-11-14 | T11 ✅ | `metodologia.html`, `zonas.html` (coropleta y ranking, enlace `#barrio=`), control de capas en Explorar (heatmap, inundación, renovación, troncales y tren) y banner de corridas con error. `scripts/copy_web_layers.py` deja 0,5 MB. Contrato de `meta.runs`: `{at, source, mode, fetched, new, removed, errors, ok}` |
 | 2026-11-14 | T10 ✅ | Explorar, detalle y favoritos en JS vanilla con Mapbox GL 3.9.4: clusters, pins con precio, rampa viridis, hoja inferior en móvil. Probado en desktop y en 390 px con datos de prueba (`web/dev/make_fixture.py`), sin errores de consola. Con 9k ofertas, filtrar toma 10–13 ms. Faltan: capas opcionales del mapa y `barrios.geojson` (T11), filtros en la URL y restringir el token de Mapbox por dominio (manual) |
 | 2026-11-14 | T5 ✅ | 22 de 23 capas (~10 MB). `movimientos_masa` da 401 en IDESC: como proxy de ladera se usa la pendiente (`bcs_pendientes_porcentaje`). Estrato por manzana con la llave `estidterre[:8]`, que cubre 12.583 manzanas; respaldo modal por barrio. 16 malls ancla desde OSM. GTFS del MIO: 60 estaciones y 1.988 paradas |
@@ -454,7 +455,7 @@ Asignación de modelo: **opus** para tareas de diseño o algoritmos (puntaje, de
 | T4 | `db.py`: esquema SQLite, upsert, `price_change`, retiradas con protección, `run`; `main.py` en modos full e incremental; `check_upsert` | T1 | opus | ✅ |
 | T5 | `scripts/fetch_layers.py`: capas IDESC, Overpass, GTFS del MIO y `config/anchors.yaml` a `data/layers/` | T1 | sonnet | ✅ |
 | T6 | Dedupe intra y entre portales + `check_dedupe` | T4 | opus | ✅ |
-| T7 | `geo.py`: barrio, comuna, estrato por manzana, amenidades, riesgos y proyectos | T4, T5 | opus | ⬜ |
+| T7 | `geo.py`: barrio, comuna, estrato por manzana, amenidades, riesgos y proyectos | T4, T5 | opus | ✅ |
 | T8 | `score.py` + `zones.py`: comparables, C1 a C5, penalizaciones, confianza + `check_score` | T6, T7 | opus | ⬜ |
 | T9 | `export.py`: `listings.json`, shards de detalle, `zones.json`, `meta.json` | T8 | sonnet | ⬜ |
 | T10 | Web: Explorar (lista y mapa Mapbox), filtros, detalle, favoritos; referencias de Mobbin | T9 (contrato de datos; puede arrancar con un fixture) | opus | ✅ |

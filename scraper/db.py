@@ -5,7 +5,7 @@ import sqlite3
 import unicodedata
 from collections import defaultdict
 
-DB_PATH = "data/sic.db"
+DB_PATH = os.environ.get("SIC_DB", "data/sic.db")
 PREFIX = {"fincaraiz": "fr", "metrocuadrado": "m2"}
 
 SCHEMA = """
@@ -56,7 +56,12 @@ FIELDS = {"source": "source", "source_id": "source_id", "url": "url", "operation
           "neighborhood": "neighborhood_portal"}
 
 
-def connect(path=DB_PATH):
+# columnas agregadas a listing_geo después del esquema inicial (las llena scraper/geo.py)
+GEO_EXTRA = {"lat": "REAL", "lng": "REAL", "amen_score": "REAL", "proj_score": "REAL", "amen_top": "TEXT", "geo_note": "TEXT"}
+
+
+def connect(path=None):
+    path = path or DB_PATH
     if path != ":memory:":
         os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     conn = sqlite3.connect(path)
@@ -66,6 +71,10 @@ def connect(path=DB_PATH):
 
 def init(conn):
     conn.executescript(SCHEMA)
+    have = {r[1] for r in conn.execute("PRAGMA table_info(listing_geo)")}
+    for col, typ in GEO_EXTRA.items():
+        if col not in have:
+            conn.execute(f"ALTER TABLE listing_geo ADD COLUMN {col} {typ}")
     conn.commit()
 
 

@@ -113,5 +113,10 @@
   "fetched": "2026-11-14",
   "features": 2048,
   "source": "https://files.mobilitydatabase.org/mdb-3356/mdb-3356-202607130343/mdb-3356-202607130343.zip"
+ },
+ "pendientes": {
+  "fetched": "2026-11-14",
+  "features": 3,
+  "source": "https://ws-idesc.cali.gov.co/geoserver/wfs?service=WFS&request=GetFeature&typeName=pot_2014:bcs_pendientes_porcentaje"
  }
 }
