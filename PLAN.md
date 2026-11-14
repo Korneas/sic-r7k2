@@ -422,6 +422,7 @@ Alertas, multiusuario o login, sincronización de favoritos, otras ciudades, arr
 | Fecha | Fase | Nota |
 |---|---|---|
 | 2026-11-14 | Plan | Volumen medido: FR ~10.850 y M2 ~9.980 (estratos 2 a 6). WFS de IDESC verificado. datos.cali.gov.co caído |
+| 2026-11-14 | T9 ✅ | `export.py` escribe en un directorio temporal y lo renombra sobre `web/data` (los shards viejos desaparecen). Exporta las canónicas de venta con coordenadas; `meta.counts` incluye `no_coords`. `check_export` ok. Se escribió en paralelo con T8 contra el formato acordado de `listing_score` |
 | 2026-11-14 | T7 ✅ | `geo.py`: 25k sintéticas en ~12 s (STRtree + kNN en numpy). El punto efectivo queda en `listing_geo.lat/lng`; la coordenada del portal no se toca, y un punto degradado guarda la original en `geo_note`. Estrato por manzana a ≤ 30 m y respaldo por barrio. Ladera: proxy de pendiente ≥ 25% (`pendientes.geojson`). Homicidios: ventana de 24 meses que termina en el último dato de la capa (2025-06). `check_geo` ok |
 | 2026-11-14 | T11 ✅ | `metodologia.html`, `zonas.html` (coropleta y ranking, enlace `#barrio=`), control de capas en Explorar (heatmap, inundación, renovación, troncales y tren) y banner de corridas con error. `scripts/copy_web_layers.py` deja 0,5 MB. Contrato de `meta.runs`: `{at, source, mode, fetched, new, removed, errors, ok}` |
 | 2026-11-14 | T10 ✅ | Explorar, detalle y favoritos en JS vanilla con Mapbox GL 3.9.4: clusters, pins con precio, rampa viridis, hoja inferior en móvil. Probado en desktop y en 390 px con datos de prueba (`web/dev/make_fixture.py`), sin errores de consola. Con 9k ofertas, filtrar toma 10–13 ms. Faltan: capas opcionales del mapa y `barrios.geojson` (T11), filtros en la URL y restringir el token de Mapbox por dominio (manual) |
@@ -457,7 +458,7 @@ Asignación de modelo: **opus** para tareas de diseño o algoritmos (puntaje, de
 | T6 | Dedupe intra y entre portales + `check_dedupe` | T4 | opus | ✅ |
 | T7 | `geo.py`: barrio, comuna, estrato por manzana, amenidades, riesgos y proyectos | T4, T5 | opus | ✅ |
 | T8 | `score.py` + `zones.py`: comparables, C1 a C5, penalizaciones, confianza + `check_score` | T6, T7 | opus | ⬜ |
-| T9 | `export.py`: `listings.json`, shards de detalle, `zones.json`, `meta.json` | T8 | sonnet | ⬜ |
+| T9 | `export.py`: `listings.json`, shards de detalle, `zones.json`, `meta.json` | T8 | sonnet | ✅ |
 | T10 | Web: Explorar (lista y mapa Mapbox), filtros, detalle, favoritos; referencias de Mobbin | T9 (contrato de datos; puede arrancar con un fixture) | opus | ✅ |
 | T11 | Web: Metodología y Zonas (coropleta) | T10 | sonnet | ✅ |
 | T12 | GitHub Actions (cron full + incremental, probe) y deploy en Vercel; restringir el token de Mapbox | T4, T9 | sonnet | ⬜ |

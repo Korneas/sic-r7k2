@@ -72,8 +72,9 @@ def write(path, obj):
     return path.stat().st_size
 
 
-def main():
-    OUT.mkdir(parents=True, exist_ok=True)
+def main(out=None):
+    out = Path(out) if out else OUT
+    out.mkdir(parents=True, exist_ok=True)
     total = 0
     for name, (src, keep, props) in LAYERS.items():
         nd = 5
@@ -83,7 +84,7 @@ def main():
             if size < 450_000 or nd <= 4:
                 break
             nd -= 1
-        total += write(OUT / f"{name}.geojson", fc)
+        total += write(out / f"{name}.geojson", fc)
         print(f"{name}: {len(fc['features'])} features, {size / 1e3:.0f} KB (decimales={nd})")
     print(f"total capas: {total / 1e6:.2f} MB")
     if total > BUDGET:
