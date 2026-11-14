@@ -19,7 +19,7 @@ import yaml
 from scraper import db
 from scraper.net import Http
 
-PIPELINE = [("dedupe", False), ("geo", False), ("score", True), ("export", True)]  # (módulo, recibe cfg)
+PIPELINE = [("dedupe", False), ("geo", False), ("zones", True), ("score", True), ("export", True)]  # (módulo, recibe cfg)
 
 
 def keep(r, cfg, kws):
