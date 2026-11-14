@@ -422,6 +422,7 @@ Alertas, multiusuario o login, sincronización de favoritos, otras ciudades, arr
 | Fecha | Fase | Nota |
 |---|---|---|
 | 2026-11-14 | Plan | Volumen medido: FR ~10.850 y M2 ~9.980 (estratos 2 a 6). WFS de IDESC verificado. datos.cali.gov.co caído |
+| 2026-11-14 | T12 ✅ | Actions: full a las 00:00 COT, incremental a las 06, 12 y 18, y `workflow_dispatch` con modo `pipeline`. La DB (sin tablas derivadas, gz ~15 MB) y `web-data.tar.gz` van como assets del release `db`. Cada corrida commitea solo `data/last_run.json`, lo que dispara Vercel; el build baja el tarball. Primera corrida de pipeline en Actions OK (dedupe → export en 35 s). Sitio en https://sic-r7k2.vercel.app. Token desde la env `MAPBOX_PK` (la `MAPBOX_TOKEN` quedó mal cargada y borrarla requiere aprobación humana). **Manual pendiente**: restringir el token por URL en el dashboard de Mapbox |
 | 2026-11-14 | T6 fix | Con datos reales el union-find encadenaba (grupos de hasta 684). Se pasó a complete-linkage best-first, con máximo 6 por grupo y 2 activas por portal; las coincidencias no exactas exigen ±2% y el barrio "Na" cuenta como vacío. Resultado: 36% agrupado (2.123 pares FR+M2, grupo máximo de 4). Revisión manual de 10 grupos entre portales: todos son el mismo inmueble |
 | 2026-11-14 | T8 ✅ | Primera corrida real: FR 10.519 y M2 9.722 (FR 75 min, M2 18 min). Puntaje: 85% de los grupos de venta activos tienen puntaje, en 4 s; 4.340 ranqueables. Filtro de outliers en dos pasadas (z_MAD > 4). Máximo 2 comparables por punto de ~15 m para que un edificio o el centroide de un barrio no domine; los inmuebles de más de 15 años no usan comparables de 8 años o menos. Pendientes: el upside sale inflado cuando la antigüedad falta o está mal (la v2 hedónica lo corrige); 1.210 grupos sin ubicación. La DB local pesa 223 MB con las tablas derivadas; en el release se guarda sin ellas y comprimida (15 MB). Los datos web (73 MB) también van al release y Vercel los descarga al compilar |
 | 2026-11-14 | T9 ✅ | `export.py` escribe en un directorio temporal y lo renombra sobre `web/data` (los shards viejos desaparecen). Exporta las canónicas de venta con coordenadas; `meta.counts` incluye `no_coords`. `check_export` ok. Se escribió en paralelo con T8 contra el formato acordado de `listing_score` |
@@ -463,7 +464,7 @@ Asignación de modelo: **opus** para tareas de diseño o algoritmos (puntaje, de
 | T9 | `export.py`: `listings.json`, shards de detalle, `zones.json`, `meta.json` | T8 | sonnet | ✅ |
 | T10 | Web: Explorar (lista y mapa Mapbox), filtros, detalle, favoritos; referencias de Mobbin | T9 (contrato de datos; puede arrancar con un fixture) | opus | ✅ |
 | T11 | Web: Metodología y Zonas (coropleta) | T10 | sonnet | ✅ |
-| T12 | GitHub Actions (cron full + incremental, probe) y deploy en Vercel; restringir el token de Mapbox | T4, T9 | sonnet | ⬜ |
+| T12 | GitHub Actions (cron full + incremental, probe) y deploy en Vercel; restringir el token de Mapbox | T4, T9 | sonnet | ✅ |
 | T13 | Primera corrida full real, revisión del top 20, ajustes | T8, T12 | opus | ⬜ |
 | T14 | QA de la UI (`break-ui`, móvil 390 px, consola limpia) y pulido | T10, T11 | sonnet | ⬜ |
 | T15 | v2: modelo hedónico con validación espacial; pesos de amenidades calibrados | T13 | opus | ⬜ |
