@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex, nofollow, noarchive">
+  <meta name="color-scheme" content="light dark">
+  <title>sic · Metodología</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&display=swap">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="doc">
+  <header class="top">
+    <a class="brand" href="./" aria-label="sic, inicio">
+      <svg class="brand-mark" viewBox="0 0 20 20" aria-hidden="true"><rect x="1" y="11" width="4" height="8" rx="1"/><rect x="8" y="6" width="4" height="13" rx="1"/><rect x="15" y="1" width="4" height="18" rx="1"/></svg>
+      <span class="brand-name">sic</span>
+      <span class="brand-sub">Oportunidades de compra en Cali</span>
+    </a>
+    <nav class="nav" aria-label="Secciones">
+      <a href="./">Explorar</a><a href="zonas.html">Zonas</a><a href="metodologia.html" aria-current="page">Metodología</a>
+    </nav>
+    <p class="fixture" id="fixture" hidden>Datos de prueba</p>
+  </header>
+
+  <main class="prose" id="top">
+    <h1>Cómo se calcula el puntaje</h1>
+    <p class="lede">El puntaje (0 a 100) responde una pregunta: <em>¿esta oferta está barata frente a lo que se pide por inmuebles parecidos cerca, y qué tan bien podría salir de ella después?</em> No es un avalúo ni una promesa de ganancia. Sirve para ordenar cientos de ofertas y decidir cuáles vale la pena visitar primero.</p>
+
+    <div class="banner" id="runBanner" role="alert" hidden></div>
+
+    <h2 id="componentes">Los 5 componentes</h2>
+    <p>Cada componente se convierte primero en un <strong>percentil de 0 a 100 dentro de Cali</strong> (100 = mejor que casi todas las ofertas), para que ninguna escala domine a las demás. Después se suman con estos pesos:</p>
+    <div class="weights" id="weights"></div>
+    <div class="formula" role="note">
+      puntaje = (suma ponderada de los 5 componentes − penalizaciones) × (0,6 + 0,4 × confianza)<br>
+      confianza = mín(1; comparables ÷ 12) × (1 si la ubicación es exacta, 0,7 si solo se conoce el barrio)
+    </div>
+
+    <h3>1. Descuento frente a comparables</h3>
+    <p>Se comparan precios por m² de ofertas vecinas. Es el componente más pesado porque es la mejor señal de que algo se está pidiendo por debajo del mercado.</p>
+    <h3>2. Potencial de reventa (upside)</h3>
+    <p>Mide cuánto podría subir el precio por m² si el inmueble quedara como los mejores de su zona. Ver la sección de upside abajo.</p>
+    <h3>3. Valorización de la zona</h3>
+    <p>60% tendencia del precio por m² del barrio en los últimos 6 a 12 meses; 40% proyectos que suelen valorizar: renovación urbana o plan parcial a ≤ 500 m (+40), área generadora de plusvalía (+25), troncal del MIO o Corredor Verde proyectado a ≤ 800 m (+30), corredor férreo del tren de cercanías a ≤ 1 km (+15, con peso bajo por la incertidumbre). Tope de 100.</p>
+    <h3>4. Amenidades</h3>
+    <p>Qué tan cerca están el transporte masivo, centros comerciales, supermercados, parques, salud, colegios y otros servicios, al estilo Walk Score. Detalle en la tabla de amenidades.</p>
+    <h3>5. Liquidez de reventa</h3>
+    <p>Vender rápido vale tanto como comprar barato. Se usan los días en mercado de las ventas ya retiradas del barrio (menos días es mejor) y la absorción (retiradas en 30 días ÷ activas).</p>
+    <p><strong>Estrato:</strong> es un filtro (estrato 2 o más) y una etiqueta, no suma puntos, porque ya está reflejado en los comparables. Se usa el estrato oficial de IDESC y, si falta, el del portal.</p>
+
+    <h2 id="comparables">Cómo funcionan los comparables</h2>
+    <ul>
+      <li>Mismo tipo (apartamento o casa), en venta, vistas en los últimos 90 días.</li>
+      <li>Área dentro de ±30% y estrato dentro de ±1.</li>
+      <li>En un radio de 800 m. Si hay pocos, se amplía a 1,5 km y luego al barrio, hasta tener al menos 8.</li>
+      <li>Se usan como máximo los 20 más cercanos, con más peso a los más próximos y de área parecida.</li>
+      <li>El precio esperado por m² es la <strong>mediana ponderada</strong> de los comparables (no el promedio, porque hay precios fuera de lo normal puestos &laquo;a capricho del vendedor&raquo;). Descuento = 1 − precio por m² ÷ precio esperado.</li>
+      <li>Si el precio es absurdo (por ejemplo, un arriendo publicado como venta o un cero de más), la oferta se marca como <strong>dato sospechoso</strong> y no se ranquea.</li>
+      <li>Una rebaja reciente (menos de 30 días) se muestra como etiqueta, pero no suma doble.</li>
+    </ul>
+    <p>Para estar en el ranking una oferta necesita precio, área mayor a 20 m², estrato 2 o más y descuento positivo. Lo demás aparece en gris con la etiqueta &laquo;no es oportunidad&raquo;.</p>
+
+    <h2 id="upside">Upside y la regla del 70%</h2>
+    <p>El <strong>ARV</strong> (valor después de arreglar) por m² es el percentil 75 de los comparables en buen estado: de 15 años de antigüedad o menos, o que digan &laquo;remodelado&raquo; o &laquo;para estrenar&raquo;. Si hay menos de 5, se usa el percentil 75 de todos. El <strong>upside</strong> es <code>ARV por m² ÷ precio por m² − 1</code>, también expresado en pesos. Si es cero o negativo, el componente vale 0.</p>
+    <p>La <strong>referencia del 70%</strong> es <code>ARV × 0,70</code>: la regla del flip dice que no conviene pagar más de ese porcentaje del valor final, y baja a 60 a 65% en mercados lentos o riesgosos. <strong>Aquí no se descuentan costos de remodelación</strong>: se mide el techo de precio de la zona, no la ganancia neta. Hay que sumar obra, gastos de compra y venta, y tiempo por cuenta propia.</p>
+    <p>Si el aviso o la antigüedad sugieren &laquo;para remodelar&raquo; (texto como &laquo;original&raquo; o más de 20 años), aparece la etiqueta de remodelar. Es informativa: no resta puntos.</p>
+
+    <h2 id="amenidades">Amenidades</h2>
+    <p>Puntaje completo si el lugar está a ≤ 400 m (unos 5 minutos a pie) y baja linealmente hasta cero a 2,4 km. Las distancias son en línea recta × 1,3 para aproximar la caminata real.</p>
+    <div class="tbl-wrap"><table class="tbl">
+      <thead><tr><th>Categoría</th><th class="r">Peso</th><th>Cuántos cuentan</th><th>Fuente</th></tr></thead>
+      <tbody>
+        <tr><td>Estación MIO troncal o terminal</td><td class="r">15</td><td>La más cercana</td><td>GTFS del MIO; respaldo OSM</td></tr>
+        <tr><td>Parada MIO pretroncal o alimentadora</td><td class="r">5</td><td>La más cercana</td><td>GTFS del MIO; respaldo OSM</td></tr>
+        <tr><td>Centro comercial</td><td class="r">15</td><td>El más cercano (los grandes pesan doble)</td><td>OSM y lista curada de los principales</td></tr>
+        <tr><td>Supermercado</td><td class="r">12</td><td>2 más cercanos</td><td>OSM</td></tr>
+        <tr><td>Parque o zona verde</td><td class="r">13</td><td>2 más cercanos, ponderados por área</td><td>OSM; respaldo IDESC y DAGMA</td></tr>
+        <tr><td>Clínica u hospital</td><td class="r">10</td><td>El más cercano, entre 400 y 1.500 m (a menos de 150 m suma 0 por tráfico y ruido)</td><td>IDESC (IPS con camas o urgencias); respaldo OSM</td></tr>
+        <tr><td>Colegios y universidades</td><td class="r">10</td><td>2 más cercanos</td><td>IDESC; respaldo OSM</td></tr>
+        <tr><td>Restaurantes y cafés</td><td class="r">8</td><td>10 más cercanos (densidad relativa)</td><td>OSM (cobertura parcial)</td></tr>
+        <tr><td>Bancos y droguerías</td><td class="r">4</td><td>2 más cercanos</td><td>OSM</td></tr>
+        <tr><td>Gimnasios y escenarios deportivos</td><td class="r">3</td><td>El más cercano</td><td>OSM; respaldo IDESC</td></tr>
+        <tr><td>Ciclorrutas</td><td class="r">0</td><td>Solo se muestran</td><td>IDESC</td></tr>
+      </tbody>
+    </table></div>
+    <p>La cobertura de OpenStreetMap en Cali es buena en centros comerciales, supermercados, parques y salud, y parcial en restaurantes, por eso estos pesan poco. Los hospitales suman a distancia caminable pero no pegados, porque el tráfico y el ruido pueden restar valor.</p>
+
+    <h2 id="penalizaciones">Penalizaciones</h2>
+    <p>Restan puntos del puntaje base y siempre se muestra la razón en la tarjeta y en el detalle.</p>
+    <div class="tbl-wrap"><table class="tbl">
+      <thead><tr><th>Condición</th><th class="r">Resta</th><th>Fuente</th></tr></thead>
+      <tbody>
+        <tr><td>Amenaza <strong>no mitigable</strong> por inundación</td><td class="r">−30</td><td>POT 2014 (IDESC)</td></tr>
+        <tr><td>Amenaza por inundación fluvial o pluvial</td><td class="r">−12</td><td>POT 2014 (IDESC)</td></tr>
+        <tr><td>Amenaza por movimientos en masa (ladera)</td><td class="r">−15</td><td>POT 2014 (IDESC)</td></tr>
+        <tr><td>Homicidios a 500 m en 24 meses: percentil 90 de Cali o más (percentil 75: −7)</td><td class="r">−15</td><td>Seguridad y Justicia (IDESC)</td></tr>
+        <tr><td>Barrio en programa de mejoramiento integral o precario</td><td class="r">−10</td><td>Vivienda (IDESC)</td></tr>
+        <tr><td>Ruido nocturno alto</td><td class="r">−5</td><td>DAGMA</td></tr>
+        <tr><td>Palabras de riesgo legal en el aviso (derechos, proindiviso, sucesión, sin escritura, posesión, remate, embargo)</td><td class="r">−10</td><td>Texto del aviso. Puede ser una oportunidad, por eso no se oculta</td></tr>
+        <tr><td>Coordenada aproximada</td><td class="r">0</td><td>No resta, baja la confianza: el análisis usa el barrio</td></tr>
+      </tbody>
+    </table></div>
+
+    <h2 id="confianza">Confianza</h2>
+    <p>El puntaje final se multiplica por un factor entre 0,6 y 1 que depende de la confianza: crece con el número de comparables (llega al máximo con 12), baja a 70% si la ubicación es aproximada y se anula si no hay área. Una oferta con pocos comparables no puede quedar arriba solo por suerte.</p>
+
+    <h2 id="limites">Limitaciones</h2>
+    <ul>
+      <li><strong>Precios de oferta, no de cierre.</strong> Se compara lo que piden los vendedores. En Cali el cierre suele quedar por debajo del precio publicado; los dos lados de la comparación tienen ese mismo sesgo, pero el descuento no es una ganancia garantizada.</li>
+      <li><strong>Arranque en frío.</strong> La tendencia de zona y la liquidez necesitan historia propia de la base de datos. Mientras no la haya, valen 50 (neutro) y se muestra &laquo;sin datos aún&raquo;. La liquidez se activa con 30 días de historia.</li>
+      <li>Los avisos pueden estar desactualizados, repetidos entre portales (se agrupan) o tener errores de área o precio.</li>
+      <li>OpenStreetMap tiene huecos; las capas oficiales (POT, estrato, homicidios) se actualizan mensual o anualmente y no reemplazan una visita ni un estudio de títulos.</li>
+      <li>No incluye costos de remodelación, notariales ni impuestos. No es asesoría financiera ni legal.</li>
+    </ul>
+
+    <h2 id="fuentes">Fuentes</h2>
+    <h3>Ofertas</h3>
+    <p>Finca Raíz y Metrocuadrado (venta de apartamentos y casas en Cali, estratos 2 a 6).</p>
+    <h3>Datos geográficos</h3>
+    <ul class="src-list">
+      <li>IDESC Cali, WFS abierto: <a href="https://ws-idesc.cali.gov.co/geoserver/wfs" target="_blank" rel="noopener">ws-idesc.cali.gov.co/geoserver/wfs</a> (barrios, comunas, estrato, homicidios, inundación, movimientos en masa, tratamientos urbanísticos, plusvalía, planes parciales, troncales proyectadas, corredor férreo, salud, educación, recreación, ruido, barrios precarios).</li>
+      <li>OpenStreetMap vía Overpass API: centros comerciales, supermercados, restaurantes, parques, estaciones del MIO, universidades, clínicas, bancos.</li>
+      <li>GTFS del MIO (Metrocali), vía MobilityData mdb-3356.</li>
+      <li>IPVU Cali, Banco de la República: valorización anual de la ciudad, como contexto.</li>
+    </ul>
+    <h3>Metodología e investigación</h3>
+    <ul class="src-list">
+      <li>Comparables y AVM: <a href="https://www.microburbs.com.au/research/avm-accuracy-whitepaper" target="_blank" rel="noopener">Microburbs</a> y <a href="https://arxiv.org/html/2603.12986v1" target="_blank" rel="noopener">arXiv 2603.12986</a>; <a href="https://www.gov.wales/sites/default/files/publications/2026-03/testing-land-valuation-methods-tesseract-academy-report.pdf" target="_blank" rel="noopener">Gobierno de Gales (2026)</a>.</li>
+      <li>Precios de oferta y outliers: <a href="https://jaer.nuaca.am/index.php/jaer/article/download/92/41/140" target="_blank" rel="noopener">estudio de Ereván</a>.</li>
+      <li>Regla del 70%: <a href="https://biggerpockets.com/blog/70-percent-rule" target="_blank" rel="noopener">BiggerPockets</a>, <a href="https://www.kiavi.com/blog/what-is-70-rule-in-house-flipping" target="_blank" rel="noopener">Kiavi</a>.</li>
+      <li>Decaimiento por distancia: <a href="https://www.walkscore.com/methodology.html" target="_blank" rel="noopener">metodología de Walk Score</a> y <a href="https://zenodo.org/records/10899286/files/submission_21.pdf" target="_blank" rel="noopener">replicación en Zenodo</a>.</li>
+      <li>Efecto de las amenidades: <a href="https://personal.lse.ac.uk/WUW2/pdf/2012_Spatial%20Variations%20in%20Amenity%20Value.pdf" target="_blank" rel="noopener">Brander y Koetse (2011)</a>; hospitales: <a href="https://repository.hku.hk/bitstream/10722/259459/1/Content.pdf" target="_blank" rel="noopener">estudio de Wuhan, HKU</a>.</li>
+      <li>Transporte masivo en Cali: <a href="https://repository.eafit.edu.co/bitstreams/d05c65bc-e28d-4571-baa1-fdc16eaa4389/download" target="_blank" rel="noopener">EAFIT</a>, <a href="https://bibliotecadigital.univalle.edu.co/bitstreams/51900e7a-8892-4f9b-a1cf-95f6739379ef/download" target="_blank" rel="noopener">Univalle</a>; efecto anticipación del metro de Bogotá: <a href="https://jtlu.org/index.php/jtlu/article/view/2593" target="_blank" rel="noopener">JTLU</a>.</li>
+      <li>Contexto de Cali: <a href="https://occidente.co/empresario/vivienda-usada-se-valoriza-en-77/" target="_blank" rel="noopener">vivienda usada +7,7% (Occidente, oct-2026)</a>, <a href="https://occidente.co/?p=95499" target="_blank" rel="noopener">m² más barato del país (Occidente, jun-2026)</a>, <a href="https://occidente.co/cali/tren-de-cercanias-del-valle-desarrollo-regional-cali/" target="_blank" rel="noopener">tren de cercanías</a>.</li>
+    </ul>
+
+    <h2 id="capas">Frescura de las capas</h2>
+    <div class="tbl-wrap"><table class="tbl">
+      <thead><tr><th>Capa</th><th>Actualizada</th></tr></thead>
+      <tbody id="layersBody"><tr><td colspan="2">Cargando…</td></tr></tbody>
+    </table></div>
+
+    <h2 id="corridas">Corridas recientes</h2>
+    <div class="tbl-wrap"><table class="tbl">
+      <thead><tr><th>Fecha</th><th>Fuente</th><th>Modo</th><th class="r">Leídas</th><th class="r">Nuevas</th><th class="r">Retiradas</th><th class="r">Errores</th></tr></thead>
+      <tbody id="runsBody"><tr><td colspan="7">Cargando…</td></tr></tbody>
+    </table></div>
+  </main>
+
+  <script src="common.js"></script>
+  <script>
+  (function () {
+    var $ = function (s) { return document.querySelector(s); };
+    var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
+    var NF = new Intl.NumberFormat('es-CO');
+    var DTF = new Intl.DateTimeFormat('es-CO', { dateStyle: 'medium', timeStyle: 'short' });
+    var COMP = [['c1_discount', 'Descuento frente a comparables', 35], ['c2_upside', 'Potencial de reventa (upside)', 25],
+      ['c3_zone', 'Valorización de la zona', 15], ['c4_amenities', 'Amenidades', 15], ['c5_liquidity', 'Liquidez de reventa', 10]];
+    var SRC = { fr: 'Finca Raíz', m2: 'Metrocuadrado' };
+    var LAYER = { osm: 'OpenStreetMap (Overpass)', idesc: 'IDESC (capas oficiales)', mio_gtfs: 'GTFS del MIO', barrios: 'Barrios y sectores', comunas: 'Comunas',
+      inundacion_fluvial: 'Inundación fluvial', inundacion_pluvial: 'Inundación pluvial', inundacion_no_mitigable: 'Amenaza no mitigable',
+      tratamientos: 'Tratamientos urbanísticos', troncales_proyectadas: 'Troncales proyectadas', corredor_ferreo: 'Corredor férreo', homicidios: 'Homicidios',
+      estrato_manzanas: 'Estrato por manzana', estrato_barrios: 'Estrato por barrio', ruido_noche: 'Ruido nocturno', plusvalia: 'Áreas de plusvalía' };
+    function fmtDay(s) { var d = new Date(/^\d{4}-\d\d-\d\d$/.test(s) ? s + 'T12:00:00' : s); return isNaN(d) ? s : d.toLocaleDateString('es-CO', { dateStyle: 'medium' }); }
+
+    function render(meta) {
+      $('#fixture').hidden = !meta.fixture;
+      var w = meta.weights || {};
+      // Si faltan pesos, o no suman ~1, se usan los de PLAN §6.4.
+      var vals = COMP.map(function (c) { return typeof w[c[0]] === 'number' ? w[c[0]] : c[2] / 100; });
+      var sum = vals.reduce(function (a, b) { return a + b; }, 0);
+      if (!(sum > 0.98 && sum < 1.02)) vals = COMP.map(function (c) { return c[2] / 100; });
+      $('#weights').innerHTML = COMP.map(function (c, i) {
+        var p = Math.round(vals[i] * 100);
+        return '<div class="w-row"><span>' + esc(c[1]) + '</span><span class="w-bar" aria-hidden="true"><i style="width:' + p + '%"></i></span><b class="num">' + p + '%</b></div>';
+      }).join('');
+
+      var bad = SIC.runsWithErrors(meta);
+      var ban = $('#runBanner');
+      if (bad.length) {
+        ban.hidden = false;
+        ban.innerHTML = '<span>Atención: la última corrida de ' + bad.map(function (b) { return esc(SRC[b.source] || b.source) + ' (' + b.errors + ' errores)'; }).join(' y ') +
+          ' tuvo errores. Los datos de esa fuente pueden estar incompletos. <a href="#corridas">Ver corridas</a>.</span>';
+      }
+
+      var L = meta.layers || {};
+      var lk = Object.keys(L).sort();
+      $('#layersBody').innerHTML = lk.length ? lk.map(function (k) {
+        return '<tr><td>' + esc(LAYER[k] || k) + '</td><td class="num">' + esc(fmtDay(L[k])) + '</td></tr>';
+      }).join('') : '<tr><td colspan="2">Sin información de capas.</td></tr>';
+
+      var runs = (meta.runs || []).slice().sort(function (a, b) { return String(b.at).localeCompare(String(a.at)); });
+      $('#runsBody').innerHTML = runs.length ? runs.map(function (r) {
+        var e = SIC.nErr(r), d = new Date(r.at);
+        return '<tr><td class="num">' + esc(isNaN(d) ? r.at : DTF.format(d)) + '</td><td>' + esc(SRC[r.source] || r.source || 'todas') + '</td><td>' + esc(r.mode === 'full' ? 'completa' : r.mode === 'incremental' ? 'incremental' : (r.mode || '—')) +
+          '</td><td class="r num">' + (r.fetched == null ? '—' : NF.format(r.fetched)) + '</td><td class="r num">' + (r.new == null ? '—' : NF.format(r.new)) +
+          '</td><td class="r num">' + (r.removed == null ? '—' : NF.format(r.removed)) + '</td><td class="r num' + (e ? ' pill-bad' : '') + '">' + (e ? NF.format(e) + ' (!)' : '0') + '</td></tr>';
+      }).join('') : '<tr><td colspan="7">Aún no hay corridas registradas.</td></tr>';
+    }
+    fetch('data/meta.json').then(function (r) { return r.ok ? r.json() : {}; }).catch(function () { return {}; }).then(render);
+  })();
+  </script>
+</body>
+</html>

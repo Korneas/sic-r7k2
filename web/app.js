@@ -598,7 +598,92 @@
       mapReady = true;
       updateMapData();
       updateVisible();
+      if (pendingFit) { pendingFit = false; fitTo(filtered); }
+      initLayers();
       if (current) setHl(current.id);
+    });
+  }
+
+  // ---------- capas opcionales (RF6) ----------
+  var LAYERS = [
+    { k: 'heat', label: 'Calor de $/m²', note: 'Densidad de precio/m² de las ofertas' },
+    { k: 'flood', label: 'Riesgo de inundación', files: ['inundacion_fluvial', 'inundacion_pluvial', 'inundacion_no_mitigable'] },
+    { k: 'reno', label: 'Renovación urbana', files: ['tratamientos_renovacion'] },
+    { k: 'tron', label: 'Troncales y tren proyectados', files: ['troncales_proyectadas', 'corredor_ferreo'] }
+  ];
+  var layerOn = {}, layerLoaded = {};
+  function initLayers() {
+    var host = $('#layersCtl'); if (!host || host.dataset.ready) return;
+    host.dataset.ready = '1';
+    host.hidden = false;
+    var body = $('#layersBody');
+    body.innerHTML = LAYERS.map(function (L) {
+      return '<label class="layer-opt"><input type="checkbox" data-layer="' + L.k + '"><span>' + esc(L.label) + '</span></label>';
+    }).join('') + '<p class="layer-note" id="layerNote" role="status"></p>';
+    $('#layersBtn').addEventListener('click', function () {
+      var open = body.hidden; body.hidden = !open; this.setAttribute('aria-expanded', open);
+    });
+    body.addEventListener('change', function (e) {
+      var k = e.target.getAttribute('data-layer'); if (!k) return;
+      layerOn[k] = e.target.checked;
+      setLayer(k);
+    });
+  }
+  function loadGJ(name) {
+    return fetch('data/layers/' + name + '.geojson').then(function (r) { if (!r.ok) throw new Error(name + ' HTTP ' + r.status); return r.json(); });
+  }
+  function ensureLayer(k) {
+    if (layerLoaded[k]) return layerLoaded[k];
+    var below = 'clusters';  // debajo de los pines de ofertas
+    var D = DARK.matches;
+    var addAll = function (defs) { defs.forEach(function (d) { if (!map.getSource(d.id)) map.addSource(d.id, { type: 'geojson', data: d.data }); d.layers.forEach(function (ly) { ly.source = d.id; map.addLayer(ly, below); }); }); };
+    if (k === 'heat') {
+      layerLoaded[k] = Promise.resolve().then(function () {
+        var feats = all.filter(function (l) { return l.pm; }).map(function (l) {
+          return { type: 'Feature', geometry: { type: 'Point', coordinates: [l.lng, l.lat] }, properties: { pm: l.pm / 1e6 } };
+        });
+        addAll([{ id: 'heat-src', data: fc(feats), layers: [{ id: 'heat', type: 'heatmap', maxzoom: 16, paint: {
+          'heatmap-weight': ['interpolate', ['linear'], ['get', 'pm'], 2.5, 0.1, 9, 1],
+          'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 9, 0.6, 15, 2],
+          'heatmap-radius': ['interpolate', ['linear'], ['zoom'], 9, 12, 15, 40],
+          'heatmap-opacity': 0.7,
+          'heatmap-color': ['interpolate', ['linear'], ['heatmap-density'], 0, 'rgba(255,255,204,0)', 0.2, '#a1dab4', 0.45, '#41b6c4', 0.7, '#2c7fb8', 1, '#253494'] } }] }]);
+      });
+    } else if (k === 'flood') {
+      layerLoaded[k] = Promise.all(LAYERS[1].files.map(loadGJ)).then(function (g) {
+        var names = LAYERS[1].files;
+        addAll(names.map(function (n, i) {
+          return { id: n, data: g[i], layers: [
+            { id: n + '-f', type: 'fill', paint: { 'fill-color': n === 'inundacion_pluvial' ? '#4aa3df' : '#1b6fd0', 'fill-opacity': n === 'inundacion_no_mitigable' ? 0.55 : 0.32 } },
+            { id: n + '-l', type: 'line', paint: { 'line-color': '#1b6fd0', 'line-width': 0.6, 'line-opacity': 0.7 } }] };
+        }));
+      });
+    } else if (k === 'reno') {
+      layerLoaded[k] = loadGJ('tratamientos_renovacion').then(function (g) {
+        addAll([{ id: 'reno', data: g, layers: [
+          { id: 'reno-f', type: 'fill', paint: { 'fill-color': '#d97706', 'fill-opacity': 0.3 } },
+          { id: 'reno-l', type: 'line', paint: { 'line-color': '#b45309', 'line-width': 1.4, 'line-dasharray': [2, 1] } }] }]);
+      });
+    } else {
+      layerLoaded[k] = Promise.all(LAYERS[3].files.map(loadGJ)).then(function (g) {
+        addAll([{ id: 'tron', data: g[0], layers: [{ id: 'tron-l', type: 'line', layout: { 'line-cap': 'round' }, paint: { 'line-color': D ? '#ff9db0' : '#c2185b', 'line-width': 3.5, 'line-dasharray': [1.5, 1.2] } }] },
+          { id: 'tren', data: g[1], layers: [{ id: 'tren-l', type: 'line', layout: { 'line-cap': 'round' }, paint: { 'line-color': D ? '#ffd166' : '#7a4a00', 'line-width': 3, 'line-dasharray': [4, 2] } }] }]);
+      });
+    }
+    return layerLoaded[k];
+  }
+  function layerIds(k) {
+    return { heat: ['heat'], flood: LAYERS[1].files.reduce(function (a, n) { return a.concat([n + '-f', n + '-l']); }, []), reno: ['reno-f', 'reno-l'], tron: ['tron-l', 'tren-l'] }[k];
+  }
+  function setLayer(k) {
+    if (!mapReady) return;
+    var note = $('#layerNote'); note.textContent = '';
+    ensureLayer(k).then(function () {
+      layerIds(k).forEach(function (id) { if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', layerOn[k] ? 'visible' : 'none'); });
+    }).catch(function () {
+      layerLoaded[k] = null; layerOn[k] = false;
+      var cb = document.querySelector('[data-layer="' + k + '"]'); if (cb) cb.checked = false;
+      note.textContent = 'No se pudo cargar la capa.';
     });
   }
   function mapFail(msg) {
@@ -689,8 +774,17 @@
     if (e.target.closest('[data-close]')) closeDetail();
     if (e.target.closest('[data-retry]') && current) openDetail(current.id);
   });
+  var pendingFit = false;
   function routeHash() {
     var id = decodeURIComponent(location.hash.slice(1));
+    var bm = /^barrio=(.+)$/.exec(id);
+    if (bm) {  // enlace desde Zonas: #barrio=<código> preconfigura el filtro de zona
+      state.f.zona = { cm: [], br: [bm[1]] };
+      history.replaceState(null, '', location.pathname + location.search);
+      apply();
+      if (mapReady) fitTo(filtered); else pendingFit = true;
+      return;
+    }
     if (id) openDetail(id); else if (current) closeDetail();
   }
   window.addEventListener('hashchange', routeHash);
@@ -922,6 +1016,8 @@
       var gen = meta.generated_at || res[0].generated_at;
       if (gen) { $('#updated').textContent = 'Actualizado ' + DTF.format(new Date(gen)); today = new Date(gen); }
       $('#fixture').hidden = !meta.fixture;
+      var bad = window.SIC && SIC.runsWithErrors(meta);
+      if (bad && bad.length) { var w = $('#runWarn'); w.hidden = false; w.title = 'Última corrida con errores: ' + bad.map(function (r) { return r.source; }).join(', '); }
       // comunas → barrios con conteo, desde las ofertas (zones.json aporta nombres si faltan).
       var cm = {};
       all.forEach(function (l) {

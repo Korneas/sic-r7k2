@@ -21,6 +21,10 @@
       <span class="brand-name">sic</span>
       <span class="brand-sub">Oportunidades de compra en Cali</span>
     </a>
+    <nav class="nav" aria-label="Secciones">
+      <a href="./" aria-current="page">Explorar</a><a href="zonas.html">Zonas</a><a href="metodologia.html">Metodología</a>
+    </nav>
+    <a class="runwarn" id="runWarn" href="metodologia.html#corridas" hidden>Última corrida con errores</a>
     <p class="fixture" id="fixture" hidden>Datos de prueba</p>
     <p class="updated" id="updated"></p>
   </header>
@@ -59,6 +63,10 @@
         <input type="checkbox" id="areaToggle" checked>
         <span>Buscar en esta área</span>
       </label>
+      <div class="layers-ctl" id="layersCtl" hidden>
+        <button type="button" class="layers-btn" id="layersBtn" aria-expanded="false" aria-controls="layersBody">Capas</button>
+        <div class="layers-body" id="layersBody" hidden></div>
+      </div>
       <div class="legend" aria-label="Escala de puntaje">
         <span class="legend-title">Puntaje</span>
         <span class="lg s0">&lt;40</span><span class="lg s1">40</span><span class="lg s2">55</span><span class="lg s3">70</span><span class="lg s4">85+</span><span class="lg sn">sin</span>
@@ -85,6 +93,7 @@
 
   <script src="https://api.mapbox.com/mapbox-gl-js/v3.9.4/mapbox-gl.js"></script>
   <script src="config.js"></script>
+  <script src="common.js"></script>
   <script src="md5.js"></script>
   <script src="app.js"></script>
 </body>

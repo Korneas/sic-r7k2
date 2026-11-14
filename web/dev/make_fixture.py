@@ -5,7 +5,7 @@
     python3 web/dev/make_fixture.py --n 9000   # prueba de rendimiento
 
 Escribe web/data/listings.json, web/data/detail/<md5(id)[:2]>.json, web/data/zones.json
-y web/data/meta.json siguiendo docs/data-contract.md §3. El paso real de export
+web/data/meta.json y web/data/barrios.geojson siguiendo docs/data-contract.md §3. El paso real de export
 (`python -m scraper.export`) SOBREESCRIBE web/data/: no edites esos archivos a mano.
 meta.json lleva "fixture": true para que la UI muestre el aviso "datos de prueba".
 
@@ -124,6 +124,40 @@ def make_images(r):
         (d / f"p{i}.svg").write_text(svg, encoding="utf-8")
 
 
+def _round(c, nd=4):
+    if isinstance(c[0], (int, float)):
+        return [round(c[0], nd), round(c[1], nd)]
+    out = []
+    for x in c:
+        y = _round(x, nd)
+        if isinstance(y[0], (int, float)) and out and out[-1] == y:
+            continue
+        out.append(y)
+    return out
+
+
+def load_barrios():
+    """data/layers/barrios.geojson -> {code: {name, comuna, c: (lat, lng), geometry}} (simplificado)."""
+    src = ROOT.parent / "data" / "layers" / "barrios.geojson"
+    d = json.loads(src.read_text(encoding="utf-8"))
+    out = {}
+    for f in d["features"]:
+        p, g = f["properties"], f["geometry"]
+        ring = g["coordinates"][0] if g["type"] == "Polygon" else g["coordinates"][0][0]
+        lng = sum(x[0] for x in ring) / len(ring)
+        lat = sum(x[1] for x in ring) / len(ring)
+        geom = {"type": g["type"], "coordinates": _round(g["coordinates"])}
+        out[str(p["barcodigo"])] = {"name": p["barnombre"], "comuna": p["barcomuna"], "c": (lat, lng), "geometry": geom}
+    return out
+
+
+def write_barrios(real, codes):
+    (OUT).mkdir(parents=True, exist_ok=True)
+    feats = [{"type": "Feature", "properties": {"code": c, "name": b["name"], "comuna": int(b["comuna"])}, "geometry": b["geometry"]}
+             for c, b in real.items()]
+    (OUT / "barrios.geojson").write_text(json.dumps({"type": "FeatureCollection", "features": feats}, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+
+
 def md5_2(s):
     return hashlib.md5(s.encode("utf-8")).hexdigest()[:2]
 
@@ -136,6 +170,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--n", type=int, default=3000)
     ap.add_argument("--seed", type=int, default=7)
+    ap.add_argument("--with-errors", action="store_true", help="la última corrida de m2 trae errores (prueba del aviso)")
     args = ap.parse_args()
     r = random.Random(args.seed)
     now = datetime(2026, 11, 14, 20, 0, tzinfo=timezone.utc)
@@ -144,12 +179,32 @@ def main():
     make_images(r)
     codes = {}
     zones = {}
+    # barrios reales (IDESC): cada barrio falso toma el polígono real más cercano
+    real = load_barrios()
+    used = set()
     for i, (name, cm, lat, lng, e, base) in enumerate(BARRIOS):
-        code = f"{cm:02d}{i:02d}"
+        code = min((c for c in real if c not in used), key=lambda c: (real[c]["c"][0] - lat) ** 2 + (real[c]["c"][1] - lng) ** 2)
+        used.add(code)
+        real[code]["name"] = name
+        real[code]["comuna"] = int(real[code]["comuna"])
+        BARRIOS[i] = (name, real[code]["comuna"], lat, lng, e, base)
         codes[name] = code
-        zones[code] = {"name": name, "comuna": cm, "n_sale": 0, "median_m2": int(base * 1e6),
+        zones[code] = {"name": name, "comuna": real[code]["comuna"], "n_sale": 0, "median_m2": int(base * 1e6),
                        "trend_12m": round(r.uniform(-0.03, 0.12), 3), "dom": r.randint(25, 140),
                        "yield": round(r.uniform(0.045, 0.075), 3), "n_rent": r.randint(5, 200)}
+    # el resto de barrios: estadísticas sintéticas (algunos sin datos, a propósito)
+    for code, b in real.items():
+        if code in zones:
+            continue
+        n = r.choice([0, 1, 4, 6, 8, 12, 15, 25, 40, 5])
+        has = n >= 3
+        zones[code] = {"name": b["name"], "comuna": int(b["comuna"]), "n_sale": n,
+                       "median_m2": int(r.uniform(2.2, 6.5) * 1e6) if has else None,
+                       "trend_12m": round(r.uniform(-0.05, 0.14), 3) if has and r.random() > 0.15 else None,
+                       "dom": r.randint(20, 160) if has else None,
+                       "yield": round(r.uniform(0.04, 0.08), 3) if has and r.random() > 0.2 else None,
+                       "n_rent": r.randint(0, 80) if has else 0}
+    write_barrios(real, codes)
 
     listings, details = [], {}
     for n in range(args.n):
@@ -344,11 +399,19 @@ def main():
     for k, v in shards.items():
         dump(OUT / "detail" / f"{k}.json", v)
     dump(OUT / "zones.json", zones)
-    runs = [{"at": (now - timedelta(hours=6 * i)).strftime("%Y-%m-%dT%H:%M:%SZ"), "mode": "full" if i % 4 == 0 else "incremental",
-             "new": r.randint(5, 120), "removed": r.randint(0, 40), "ok": True} for i in range(20)]
+    runs = []
+    for i in range(10):
+        at = now - timedelta(hours=6 * i)
+        for src in ("fr", "m2"):
+            fetched = r.randint(900, 2600)
+            errs = 1 if (i == 3 and src == "fr") else 0  # error viejo: no activa el aviso
+            if args.with_errors and i == 0 and src == "m2":
+                errs = 4
+            runs.append({"at": at.strftime("%Y-%m-%dT%H:%M:%SZ"), "source": src, "mode": "full" if i % 4 == 0 else "incremental",
+                         "fetched": fetched, "new": r.randint(5, 120), "removed": r.randint(0, 40), "errors": errs, "ok": errs == 0})
     dump(OUT / "meta.json", {"generated_at": gen, "fixture": True,
                               "weights": {"c1_discount": 0.35, "c2_upside": 0.25, "c3_zone": 0.15, "c4_amenities": 0.15, "c5_liquidity": 0.10},
-                              "runs": runs, "layers": {"osm": "2026-11-10", "idesc": "2026-11-01", "mio_gtfs": "2026-11-01"},
+                              "runs": runs, "layers": {"osm": "2026-11-10", "idesc": "2026-11-01", "mio_gtfs": "2026-11-01", "barrios": "2026-11-14", "inundacion_fluvial": "2026-11-14"},
                               "counts": {"sale_active": len(listings), "ranked": sum(1 for x in listings if x["s"] is not None)}})
     size = (OUT / "listings.json").stat().st_size
     print(f"ok: {len(listings)} ofertas, {len(shards)} shards de detalle, listings.json {size / 1e6:.2f} MB")

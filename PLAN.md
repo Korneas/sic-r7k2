@@ -422,6 +422,7 @@ Alertas, multiusuario o login, sincronización de favoritos, otras ciudades, arr
 | Fecha | Fase | Nota |
 |---|---|---|
 | 2026-11-14 | Plan | Volumen medido: FR ~10.850 y M2 ~9.980 (estratos 2 a 6). WFS de IDESC verificado. datos.cali.gov.co caído |
+| 2026-11-14 | T11 ✅ | `metodologia.html`, `zonas.html` (coropleta y ranking, enlace `#barrio=`), control de capas en Explorar (heatmap, inundación, renovación, troncales y tren) y banner de corridas con error. `scripts/copy_web_layers.py` deja 0,5 MB. Contrato de `meta.runs`: `{at, source, mode, fetched, new, removed, errors, ok}` |
 | 2026-11-14 | T10 ✅ | Explorar, detalle y favoritos en JS vanilla con Mapbox GL 3.9.4: clusters, pins con precio, rampa viridis, hoja inferior en móvil. Probado en desktop y en 390 px con datos de prueba (`web/dev/make_fixture.py`), sin errores de consola. Con 9k ofertas, filtrar toma 10–13 ms. Faltan: capas opcionales del mapa y `barrios.geojson` (T11), filtros en la URL y restringir el token de Mapbox por dominio (manual) |
 | 2026-11-14 | T5 ✅ | 22 de 23 capas (~10 MB). `movimientos_masa` da 401 en IDESC: como proxy de ladera se usa la pendiente (`bcs_pendientes_porcentaje`). Estrato por manzana con la llave `estidterre[:8]`, que cubre 12.583 manzanas; respaldo modal por barrio. 16 malls ancla desde OSM. GTFS del MIO: 60 estaciones y 1.988 paradas |
 | 2026-11-14 | T3 ✅ | M2: sin tope de profundidad (5.938 OK). El orden por defecto es aleatorio: se ordena por precio ascendente (`sortField=mvalorventa`, `sortOrder=asc`) para que la paginación sea estable. **No hay orden por fecha ni fecha de publicación**, así que el incremental de M2 hace un barrido completo (~205 requests, ~17 min). Aparece basura de precio (arriendos publicados como venta): el puntaje debe filtrar precio/m² absurdo |
@@ -457,7 +458,7 @@ Asignación de modelo: **opus** para tareas de diseño o algoritmos (puntaje, de
 | T8 | `score.py` + `zones.py`: comparables, C1 a C5, penalizaciones, confianza + `check_score` | T6, T7 | opus | ⬜ |
 | T9 | `export.py`: `listings.json`, shards de detalle, `zones.json`, `meta.json` | T8 | sonnet | ⬜ |
 | T10 | Web: Explorar (lista y mapa Mapbox), filtros, detalle, favoritos; referencias de Mobbin | T9 (contrato de datos; puede arrancar con un fixture) | opus | ✅ |
-| T11 | Web: Metodología y Zonas (coropleta) | T10 | sonnet | ⬜ |
+| T11 | Web: Metodología y Zonas (coropleta) | T10 | sonnet | ✅ |
 | T12 | GitHub Actions (cron full + incremental, probe) y deploy en Vercel; restringir el token de Mapbox | T4, T9 | sonnet | ⬜ |
 | T13 | Primera corrida full real, revisión del top 20, ajustes | T8, T12 | opus | ⬜ |
 | T14 | QA de la UI (`break-ui`, móvil 390 px, consola limpia) y pulido | T10, T11 | sonnet | ⬜ |

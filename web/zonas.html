@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex, nofollow, noarchive">
+  <meta name="color-scheme" content="light dark">
+  <title>sic · Zonas</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&display=swap">
+  <link rel="stylesheet" href="https://api.mapbox.com/mapbox-gl-js/v3.9.4/mapbox-gl.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="zonas">
+  <header class="top">
+    <a class="brand" href="./" aria-label="sic, inicio">
+      <svg class="brand-mark" viewBox="0 0 20 20" aria-hidden="true"><rect x="1" y="11" width="4" height="8" rx="1"/><rect x="8" y="6" width="4" height="13" rx="1"/><rect x="15" y="1" width="4" height="18" rx="1"/></svg>
+      <span class="brand-name">sic</span>
+      <span class="brand-sub">Oportunidades de compra en Cali</span>
+    </a>
+    <nav class="nav" aria-label="Secciones">
+      <a href="./">Explorar</a><a href="zonas.html" aria-current="page">Zonas</a><a href="metodologia.html">Metodología</a>
+    </nav>
+    <a class="runwarn" id="runWarn" href="metodologia.html#corridas" hidden>Última corrida con errores</a>
+    <p class="fixture" id="fixture" hidden>Datos de prueba</p>
+  </header>
+
+  <div class="z-bar">
+    <div class="seg-m" id="metrics" role="radiogroup" aria-label="Métrica del mapa"></div>
+    <p class="z-hint" id="zHint"></p>
+  </div>
+
+  <main class="z-main">
+    <div class="z-map">
+      <div id="zmap" role="region" aria-label="Mapa de barrios por métrica"></div>
+      <div class="z-legend" id="zLegend" aria-live="polite"></div>
+    </div>
+    <section class="z-side" aria-label="Ranking de barrios">
+      <div class="z-search"><input type="search" id="zq" placeholder="Buscar barrio…" aria-label="Buscar barrio" autocomplete="off"></div>
+      <div class="z-scroll">
+        <table class="tbl z-tbl" id="zt">
+          <thead><tr>
+            <th scope="col" data-k="name"><button type="button">Barrio</button></th>
+            <th scope="col" class="r" data-k="median_m2"><button type="button">$/m²</button></th>
+            <th scope="col" class="r" data-k="trend_12m"><button type="button">12m</button></th>
+            <th scope="col" class="r" data-k="dom"><button type="button">Días</button></th>
+            <th scope="col" class="r" data-k="yield"><button type="button">Rent.</button></th>
+            <th scope="col" class="r" data-k="n_sale"><button type="button">Ofertas</button></th>
+          </tr></thead>
+          <tbody id="ztb"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+  <div class="z-tip" id="zTip" hidden></div>
+
+  <script src="https://api.mapbox.com/mapbox-gl-js/v3.9.4/mapbox-gl.js"></script>
+  <script src="config.js"></script>
+  <script src="common.js"></script>
+  <script>
+  (function () {
+    var $ = function (s) { return document.querySelector(s); };
+    var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
+    var NF = new Intl.NumberFormat('es-CO'), NF1 = new Intl.NumberFormat('es-CO', { maximumFractionDigits: 1, minimumFractionDigits: 1 });
+    var DARK = window.matchMedia('(prefers-color-scheme: dark)');
+    var NODATA = '#b3bcb8';
+    var SEQ = ['#ffffcc', '#a1dab4', '#41b6c4', '#2c7fb8', '#253494'];      // ColorBrewer YlGnBu 5 (apta para daltonismo)
+    var DIV = ['#b2182b', '#ef8a62', '#f2f2f2', '#67a9cf', '#2166ac'];      // ColorBrewer RdBu 5 (divergente)
+    var pctS = function (x, d) { return (x > 0 ? '+' : x < 0 ? '−' : '') + NF1.format(Math.abs(x) * 100).replace(/,0$/, ',0') + '%'; };
+    var M = [
+      { k: 'median_m2', label: 'Mediana $/m² venta', unit: '$/m²', fmt: function (v) { return '$' + NF1.format(v / 1e6) + 'M'; }, hint: 'Más oscuro = más caro por m²' },
+      { k: 'trend_12m', label: 'Tendencia 12m', unit: 'cambio 12 meses', fmt: function (v) { return pctS(v); }, div: [-0.03, -0.01, 0.01, 0.05], hint: 'Azul = sube, rojo = baja' },
+      { k: 'dom', label: 'Días en mercado', unit: 'días', fmt: function (v) { return NF.format(Math.round(v)); }, hint: 'Más oscuro = se demora más en venderse' },
+      { k: 'yield', label: 'Rentabilidad bruta arriendo', unit: 'anual', fmt: function (v) { return NF1.format(v * 100) + '%'; }, hint: 'Más oscuro = mayor arriendo anual ÷ precio' },
+      { k: 'n_sale', label: '# ofertas', unit: 'ofertas activas', fmt: function (v) { return NF.format(v); }, hint: 'Más oscuro = más ofertas activas' }
+    ];
+    var MBY = {}; M.forEach(function (m) { MBY[m.k] = m; });
+    var metric = M[0], zones = {}, gj = null, rows = [], bins = [], map = null, ready = false, sortK = 'median_m2', sortDir = -1, hotCode = null, q = '', popup = null;
+    try { var sm = localStorage.getItem('sic-zmetric'); if (sm && MBY[sm]) { metric = MBY[sm]; sortK = sm; sortDir = sm === 'dom' ? 1 : -1; } } catch (e) {}
+
+    function val(code, k) { var z = zones[code]; var v = z ? z[k] : null; return v == null ? null : v; }
+    function computeBins() {
+      var m = metric;
+      if (m.div) { bins = m.div; return; }
+      var xs = rows.map(function (r) { return r[m.k]; }).filter(function (v) { return v != null; }).sort(function (a, b) { return a - b; });
+      var b = [];
+      [0.2, 0.4, 0.6, 0.8].forEach(function (p) {
+        if (!xs.length) return;
+        var v = xs[Math.min(xs.length - 1, Math.floor(p * xs.length))];
+        if (!b.length || v > b[b.length - 1]) b.push(v);
+      });
+      bins = b;
+    }
+    function colorOf(v) {
+      if (v == null) return NODATA;
+      var pal = metric.div ? DIV : SEQ, i = 0;
+      while (i < bins.length && v >= bins[i]) i++;
+      if (!metric.div && bins.length < 4) i = Math.min(i, bins.length);
+      return pal[Math.min(i, pal.length - 1)];
+    }
+    function legend() {
+      var pal = metric.div ? DIV : SEQ, items = [], n = bins.length;
+      for (var i = 0; i <= n; i++) {
+        var lo = i === 0 ? null : bins[i - 1], hi = i === n ? null : bins[i];
+        var t = lo == null ? '< ' + metric.fmt(hi) : hi == null ? '≥ ' + metric.fmt(lo) : metric.fmt(lo) + ' a ' + metric.fmt(hi);
+        items.push('<li><i style="background:' + pal[i] + '"></i>' + esc(t) + '</li>');
+      }
+      items.push('<li><i style="background:' + NODATA + '"></i>sin datos</li>');
+      $('#zLegend').innerHTML = '<b>' + esc(metric.label) + ' (' + esc(metric.unit) + ')</b><ul>' + items.join('') + '</ul>';
+      $('#zHint').textContent = metric.hint;
+    }
+    function paint() {
+      computeBins(); legend();
+      if (gj) {
+        gj.features.forEach(function (f) { f.properties.c = colorOf(val(f.properties.code, metric.k)); });
+        if (ready) map.getSource('z').setData(gj);
+      }
+    }
+    function renderMetrics() {
+      $('#metrics').innerHTML = M.map(function (m) { return '<button type="button" role="radio" aria-checked="' + (m === metric) + '" data-k="' + m.k + '">' + esc(m.label) + '</button>'; }).join('');
+    }
+    $('#metrics').addEventListener('click', function (e) {
+      var b = e.target.closest('button[data-k]'); if (!b) return;
+      metric = MBY[b.getAttribute('data-k')];
+      try { localStorage.setItem('sic-zmetric', metric.k); } catch (x) {}
+      sortK = metric.k; sortDir = metric.k === 'dom' ? 1 : -1;
+      renderMetrics(); paint(); renderTable();
+    });
+
+    function renderTable() {
+      var nq = q.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+      var list = rows.filter(function (r) { return !nq || r.name.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().indexOf(nq) >= 0; });
+      list.sort(function (a, b) {
+        var x = a[sortK], y = b[sortK];
+        if (sortK === 'name') return sortDir * a.name.localeCompare(b.name, 'es');
+        if (x == null && y == null) return a.name.localeCompare(b.name, 'es');
+        if (x == null) return 1; if (y == null) return -1;
+        return sortDir * (x - y) || a.name.localeCompare(b.name, 'es');
+      });
+      var cell = function (r, k, f) { return r[k] == null ? '<td class="r nodata" aria-label="sin datos">—</td>' : '<td class="r num">' + f(r[k]) + '</td>'; };
+      $('#ztb').innerHTML = list.length ? list.map(function (r) {
+        return '<tr data-code="' + esc(r.code) + '"' + (r.code === hotCode ? ' class="hot"' : '') + '><td><a href="index.html#barrio=' + encodeURIComponent(r.code) + '" title="Ver ofertas en ' + esc(r.name) + '">' + esc(r.name) + '</a><br><small class="z-hint">Comuna ' + esc(r.comuna) + '</small></td>' +
+          cell(r, 'median_m2', MBY.median_m2.fmt) + cell(r, 'trend_12m', MBY.trend_12m.fmt) + cell(r, 'dom', MBY.dom.fmt) + cell(r, 'yield', MBY.yield.fmt) + cell(r, 'n_sale', MBY.n_sale.fmt) + '</tr>';
+      }).join('') : '<tr><td colspan="6">Ningún barrio coincide con «' + esc(q) + '».</td></tr>';
+      document.querySelectorAll('#zt th').forEach(function (th) {
+        th.setAttribute('aria-sort', th.getAttribute('data-k') === sortK ? (sortDir > 0 ? 'ascending' : 'descending') : 'none');
+      });
+    }
+    $('#zt thead').addEventListener('click', function (e) {
+      var th = e.target.closest('th'); if (!th) return;
+      var k = th.getAttribute('data-k');
+      if (k === sortK) sortDir = -sortDir; else { sortK = k; sortDir = k === 'name' || k === 'dom' ? 1 : -1; }
+      renderTable();
+    });
+    $('#zq').addEventListener('input', function (e) { q = e.target.value; renderTable(); });
+
+    function setHot(code) {
+      if (hotCode === code) return;
+      hotCode = code;
+      if (ready) map.setFilter('z-hl', ['==', ['get', 'code'], code || '']);
+      document.querySelectorAll('#ztb tr.hot').forEach(function (t) { t.classList.remove('hot'); });
+      if (code) { var tr = document.querySelector('#ztb tr[data-code="' + CSS.escape(code) + '"]'); if (tr) tr.classList.add('hot'); }
+    }
+    $('#ztb').addEventListener('mouseover', function (e) { var tr = e.target.closest('tr[data-code]'); if (tr) setHot(tr.getAttribute('data-code')); });
+    $('#ztb').addEventListener('mouseleave', function () { setHot(null); });
+    $('#ztb').addEventListener('click', function (e) {
+      var tr = e.target.closest('tr[data-code]'); if (!tr || e.target.closest('a')) return;
+      var f = gj && gj.features.filter(function (x) { return x.properties.code === tr.getAttribute('data-code'); })[0];
+      if (f && ready) { var b = bbox(f.geometry); map.fitBounds(b, { padding: 60, maxZoom: 15 }); if (window.innerWidth <= 768) $('.z-map').scrollIntoView({ block: 'nearest' }); }
+    });
+    function bbox(g) {
+      var b = new mapboxgl.LngLatBounds();
+      (function walk(c) { if (typeof c[0] === 'number') b.extend(c); else c.forEach(walk); })(g.coordinates);
+      return b;
+    }
+    function tipHTML(code, name) {
+      var z = zones[code] || {};
+      var l = function (lab, k) { return '<div>' + lab + ': <b>' + (z[k] == null ? 'sin datos' : MBY[k].fmt(z[k])) + '</b></div>'; };
+      return '<b>' + esc(name) + '</b><div>Comuna ' + esc(z.comuna != null ? z.comuna : '—') + '</div>' + l('$/m²', 'median_m2') + l('Tendencia 12m', 'trend_12m') + l('Días en mercado', 'dom') + l('Rentab. bruta', 'yield') + l('Ofertas', 'n_sale');
+    }
+
+    function initMap() {
+      var wrap = $('.z-map');
+      var fail = function (msg) { wrap.insertAdjacentHTML('beforeend', '<div class="map-fallback">' + esc(msg) + ' El ranking sigue funcionando.</div>'); };
+      if (!window.mapboxgl || !window.MAPBOX_TOKEN) return fail('No se pudo cargar Mapbox.');
+      mapboxgl.accessToken = window.MAPBOX_TOKEN;
+      try {
+        map = new mapboxgl.Map({ container: 'zmap', style: DARK.matches ? 'mapbox://styles/mapbox/dark-v11' : 'mapbox://styles/mapbox/light-v11',
+          center: [-76.522, 3.425], zoom: 10.8, minZoom: 9, maxZoom: 17, locale: { 'NavigationControl.ZoomIn': 'Acercar', 'NavigationControl.ZoomOut': 'Alejar', 'NavigationControl.ResetBearing': 'Restablecer orientación' } });
+      } catch (e) { return fail('Tu navegador no puede mostrar el mapa (WebGL).'); }
+      map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), 'top-right');
+      map.on('error', function (e) { if (e && e.error && /401|403|token/i.test(String(e.error.message || e.error.status))) fail('El token de Mapbox no es válido para este dominio.'); });
+      map.on('load', function () {
+        var go = function () {
+          if (ready || !gj) return;
+          map.addSource('z', { type: 'geojson', data: gj });
+          map.addLayer({ id: 'z-fill', type: 'fill', source: 'z', paint: { 'fill-color': ['get', 'c'], 'fill-opacity': DARK.matches ? 0.8 : 0.75 } });
+          map.addLayer({ id: 'z-line', type: 'line', source: 'z', paint: { 'line-color': DARK.matches ? '#0e1412' : '#ffffff', 'line-width': 0.7, 'line-opacity': 0.8 } });
+          map.addLayer({ id: 'z-hl', type: 'line', source: 'z', filter: ['==', ['get', 'code'], ''], paint: { 'line-color': DARK.matches ? '#e4ebe8' : '#14201b', 'line-width': 2.5 } });
+          ready = true;
+          var bb = new mapboxgl.LngLatBounds(); gj.features.forEach(function (f) { bb.extend(bbox(f.geometry)); });
+          map.fitBounds(bb, { padding: 30, duration: 0 });
+          var tip = $('#zTip');
+          map.on('mousemove', 'z-fill', function (e) {
+            var f = e.features[0]; map.getCanvas().style.cursor = 'pointer';
+            setHot(f.properties.code);
+            tip.innerHTML = tipHTML(f.properties.code, f.properties.name); tip.hidden = false;
+            var x = e.originalEvent.clientX + 14, y = e.originalEvent.clientY + 14;
+            tip.style.left = Math.min(x, window.innerWidth - tip.offsetWidth - 8) + 'px';
+            tip.style.top = Math.min(y, window.innerHeight - tip.offsetHeight - 8) + 'px';
+          });
+          map.on('mouseleave', 'z-fill', function () { map.getCanvas().style.cursor = ''; tip.hidden = true; setHot(null); });
+          map.on('click', 'z-fill', function (e) {
+            var f = e.features[0], p = f.properties;
+            if (popup) popup.remove();
+            popup = new mapboxgl.Popup({ maxWidth: '260px' }).setLngLat(e.lngLat)
+              .setHTML('<div class="z-pop">' + tipHTML(p.code, p.name) + '<div style="margin-top:6px"><a href="index.html#barrio=' + encodeURIComponent(p.code) + '">Ver ofertas en este barrio →</a></div></div>').addTo(map);
+          });
+        };
+        map.__go = go; go();
+      });
+    }
+
+    Promise.all([
+      fetch('data/barrios.geojson').then(function (r) { if (!r.ok) throw new Error('barrios.geojson HTTP ' + r.status); return r.json(); }),
+      fetch('data/zones.json').then(function (r) { if (!r.ok) throw new Error('zones.json HTTP ' + r.status); return r.json(); }),
+      fetch('data/meta.json').then(function (r) { return r.ok ? r.json() : {}; }).catch(function () { return {}; })
+    ]).then(function (res) {
+      gj = res[0]; zones = res[1];
+      var meta = res[2] || {};
+      $('#fixture').hidden = !meta.fixture;
+      var bad = SIC.runsWithErrors(meta); if (bad.length) $('#runWarn').hidden = false;
+      gj.features.forEach(function (f) { var z = zones[f.properties.code]; if (z && z.name) f.properties.name = z.name; });
+      rows = Object.keys(zones).map(function (c) { var z = zones[c]; return { code: c, name: z.name || c, comuna: z.comuna, median_m2: val(c, 'median_m2'), trend_12m: val(c, 'trend_12m'), dom: val(c, 'dom'), yield: val(c, 'yield'), n_sale: val(c, 'n_sale') }; });
+      renderMetrics(); paint(); renderTable();
+      if (map && map.loaded() && map.__go) map.__go();
+    }).catch(function (e) {
+      $('#ztb').innerHTML = '<tr><td colspan="6">No se pudieron cargar los datos de zonas (' + esc(e.message) + '). Corre <code>python3 web/dev/make_fixture.py</code> o el export.</td></tr>';
+      renderMetrics();
+    });
+    renderMetrics();
+    initMap();
+  })();
+  </script>
+</body>
+</html>
