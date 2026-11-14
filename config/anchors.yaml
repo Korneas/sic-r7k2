@@ -1,0 +1,66 @@
+# Major Cali malls (weight x2 in amenities). Coordinates matched by name from OSM (scripts/fetch_layers.py).
+malls:
+  - name: "Chipichape"
+    osm_name: "Chipichape"
+    lat: 3.476435
+    lng: -76.528243
+  - name: "Unicentro"
+    osm_name: "Unicentro Cali"
+    lat: 3.374032
+    lng: -76.539636
+  - name: "Jardín Plaza"
+    osm_name: "Jardín Plaza"
+    lat: 3.368782
+    lng: -76.527556
+  - name: "Palmetto Plaza"
+    osm_name: "Palmetto Plaza"
+    lat: 3.412479
+    lng: -76.540523
+  - name: "Cosmocentro"
+    osm_name: "Cosmocentro"
+    lat: 3.4140925
+    lng: -76.5470317
+  - name: "Pacific Mall"
+    osm_name: "World Trade Center-Pacific Mall"
+    lat: 3.4745203
+    lng: -76.5280216
+  - name: "Centenario"
+    osm_name: "Centro Comercial Centenario"
+    lat: 3.4541211
+    lng: -76.537006
+  - name: "Premier El Limonar"
+    osm_name: "Centro Comercial Premier El Limonar"
+    lat: 3.394771
+    lng: -76.544841
+  - name: "Único Outlet"
+    osm_name: "CC Unico 2"
+    lat: 3.46458
+    lng: -76.502084
+  - name: "Holguines Trade Center"
+    osm_name: "Centro Comercial Holguines Trade Center"
+    lat: 3.37177
+    lng: -76.539711
+  - name: "Calima"
+    osm_name: "LABORATORIO CLÍNICO CENTRO COMERCIAL CALIMA"
+    lat: 3.485181
+    lng: -76.4974602
+  - name: "La Estación"
+    osm_name: "Centro Comercial La Estación"
+    lat: 3.4647072
+    lng: -76.5132506
+  - name: "Mallplaza Cali"
+    osm_name: "Mallplaza"
+    lat: 3.4127803
+    lng: -76.5486667
+  - name: "Aventura Plaza"
+    osm_name: "Centro Comercial Aventura Plaza"
+    lat: 3.368256
+    lng: -76.530328
+  - name: "Multicentro"
+    osm_name: "Multicentro unidad 1"
+    lat: 3.3776647
+    lng: -76.5380162
+  - name: "Río Cauca"
+    osm_name: "Centro Comercial Rio Cauca"
+    lat: 3.4415017
+    lng: -76.4784465

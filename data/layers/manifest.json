@@ -1,0 +1,117 @@
+{
+ "barrios": {
+  "fetched": "2026-11-14",
+  "features": 342,
+  "source": "https://ws-idesc.cali.gov.co/geoserver/wfs?service=WFS&request=GetFeature&typeName=dapm:pdt_dpa_barrios_sectores"
+ },
+ "comunas": {
+  "fetched": "2026-11-14",
+  "features": 22,
+  "source": "https://ws-idesc.cali.gov.co/geoserver/wfs?service=WFS&request=GetFeature&typeName=dapm:pdt_dpa_comunas"
+ },
+ "inundacion_fluvial": {
+  "fetched": "2026-11-14",
+  "features": 423,
+  "source": "https://ws-idesc.cali.gov.co/geoserver/wfs?service=WFS&request=GetFeature&typeName=pot_2014:amb_ari_inundacion_fluvial"
+ },
+ "inundacion_pluvial": {
+  "fetched": "2026-11-14",
+  "features": 227,
+  "source": "https://ws-idesc.cali.gov.co/geoserver/wfs?service=WFS&request=GetFeature&typeName=pot_2014:amb_ari_inundacion_pluvial"
+ },
+ "inundacion_no_mitigable": {
+  "fetched": "2026-11-14",
+  "features": 3,
+  "source": "https://ws-idesc.cali.gov.co/geoserver/wfs?service=WFS&request=GetFeature&typeName=expediente_municipal:emc_amb_ari_amenaza_no_mitigable_inundacion"
+ },
+ "tratamientos": {
+  "fetched": "2026-11-14",
+  "features": 135,
+  "source": "https://ws-idesc.cali.gov.co/geoserver/wfs?service=WFS&request=GetFeature&typeName=pot_2014:nur_tratamientos_urbanisticos"
+ },
+ "plusvalia": {
+  "fetched": "2026-11-14",
+  "features": 16,
+  "source": "https://ws-idesc.cali.gov.co/geoserver/wfs?service=WFS&request=GetFeature&typeName=pot_2014:nur_areas_generadoras_plusvalia"
+ },
+ "planes_parciales": {
+  "fetched": "2026-11-14",
+  "features": 4,
+  "source": "https://ws-idesc.cali.gov.co/geoserver/wfs?service=WFS&request=GetFeature&typeName=emru:emru_pcp_planes_parciales"
+ },
+ "ciudad_paraiso": {
+  "fetched": "2026-11-14",
+  "features": 4,
+  "source": "https://ws-idesc.cali.gov.co/geoserver/wfs?service=WFS&request=GetFeature&typeName=emru:emru_pcp_ciudad_paraiso"
+ },
+ "troncales_proyectadas": {
+  "fetched": "2026-11-14",
+  "features": 6,
+  "source": "https://ws-idesc.cali.gov.co/geoserver/wfs?service=WFS&request=GetFeature&typeName=pot_2014:mov_sitm_troncales_proyectadas"
+ },
+ "corredor_ferreo": {
+  "fetched": "2026-11-14",
+  "features": 5,
+  "source": "https://ws-idesc.cali.gov.co/geoserver/wfs?service=WFS&request=GetFeature&typeName=pot_2014:mov_corredor_ferreo"
+ },
+ "ips": {
+  "fetched": "2026-11-14",
+  "features": 482,
+  "source": "https://ws-idesc.cali.gov.co/geoserver/wfs?service=WFS&request=GetFeature&typeName=salud:ads_ips_capacidad_reps"
+ },
+ "colegios": {
+  "fetched": "2026-11-14",
+  "features": 356,
+  "source": "https://ws-idesc.cali.gov.co/geoserver/wfs?service=WFS&request=GetFeature&typeName=educacion:esf_establecimiento_educativo"
+ },
+ "recreacion": {
+  "fetched": "2026-11-14",
+  "features": 77,
+  "source": "https://ws-idesc.cali.gov.co/geoserver/wfs?service=WFS&request=GetFeature&typeName=pot_2014:eqp_uco_recreacion"
+ },
+ "escenarios_deportivos": {
+  "fetched": "2026-11-14",
+  "features": 1021,
+  "source": "https://ws-idesc.cali.gov.co/geoserver/wfs?service=WFS&request=GetFeature&typeName=deporte_recreacion:escenarios_deportivos"
+ },
+ "barrios_precarios": {
+  "fetched": "2026-11-14",
+  "features": 71,
+  "source": "https://ws-idesc.cali.gov.co/geoserver/wfs?service=WFS&request=GetFeature&typeName=vivienda:pmih_barrios_precarios"
+ },
+ "mejoramiento": {
+  "fetched": "2026-11-14",
+  "features": 2,
+  "source": "https://ws-idesc.cali.gov.co/geoserver/wfs?service=WFS&request=GetFeature&typeName=pot_2014:nur_programa_mejoramiento"
+ },
+ "homicidios": {
+  "fetched": "2026-11-14",
+  "features": 3435,
+  "source": "https://ws-idesc.cali.gov.co/geoserver/wfs?service=WFS&request=GetFeature&typeName=seguridad_justicia:ps_os_homicidios"
+ },
+ "ciclorutas": {
+  "fetched": "2026-11-14",
+  "features": 103,
+  "source": "https://ws-idesc.cali.gov.co/geoserver/wfs?service=WFS&request=GetFeature&typeName=pot_2014:mov_jerarquizacion_ciclorutas"
+ },
+ "ruido_noche": {
+  "fetched": "2026-11-14",
+  "features": 69,
+  "source": "https://ws-idesc.cali.gov.co/geoserver/wfs?service=WFS&request=GetFeature&typeName=dagma:obs_rui_semana_noche"
+ },
+ "estrato_manzanas": {
+  "fetched": "2026-11-14",
+  "features": 12583,
+  "source": "https://ws-idesc.cali.gov.co/geoserver/wfs?service=WFS&request=GetFeature&typeName=dapm:pdt_est_estrato_urbano_expansion + catastro:cat_bas_manzanas"
+ },
+ "osm_pois": {
+  "fetched": "2026-11-14",
+  "features": 3349,
+  "source": "https://overpass-api.de/api/interpreter"
+ },
+ "mio_stops": {
+  "fetched": "2026-11-14",
+  "features": 2048,
+  "source": "https://files.mobilitydatabase.org/mdb-3356/mdb-3356-202607130343/mdb-3356-202607130343.zip"
+ }
+}
