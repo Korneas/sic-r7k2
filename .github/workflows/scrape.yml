@@ -1,0 +1,57 @@
+name: scrape
+on:
+  schedule:
+    - cron: "0 5 * * *"          # 00:00 COT: barrido completo
+    - cron: "0 11,17,23 * * *"   # 06:00, 12:00, 18:00 COT: incremental
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: full | incremental | pipeline
+        default: incremental
+
+permissions:
+  contents: write
+
+concurrency: scrape
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      # la DB vive como asset del release "db" (se sobrescribe), no en el historial de git (PLAN §5.4)
+      - name: bajar DB
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: gh release download db -p sic.db -D data || echo "sin DB previa: arranca vacía"
+      - name: modo
+        id: mode
+        run: |
+          M="${{ github.event.inputs.mode }}"
+          if [ -z "$M" ]; then [ "${{ github.event.schedule }}" = "0 5 * * *" ] && M=full || M=incremental; fi
+          echo "mode=$M" >> "$GITHUB_OUTPUT"
+      # sale con error solo si todas las fuentes fallan (GitHub avisa por correo)
+      - name: scrape + pipeline
+        run: |
+          if [ "${{ steps.mode.outputs.mode }}" = pipeline ]; then
+            python -u -m scraper.main --pipeline-only
+          else
+            python -u -m scraper.main --mode ${{ steps.mode.outputs.mode }}
+          fi
+      - name: subir DB y commit
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          python -c "import sqlite3;c=sqlite3.connect('data/sic.db');c.execute('VACUUM');c.close()"
+          git config user.name "scraper-bot"
+          git config user.email "scraper-bot@users.noreply.github.com"
+          gh release view db >/dev/null 2>&1 || gh release create db --title db --notes "SQLite de sic (se sobrescribe en cada corrida)"
+          gh release upload db data/sic.db --clobber
+          git add web/data
+          git diff --cached --quiet && { echo "sin cambios"; exit 0; }
+          git commit -q -m "data: ${{ steps.mode.outputs.mode }} $(TZ=America/Bogota date +'%Y-%m-%d %H:%M') COT"
+          git push
