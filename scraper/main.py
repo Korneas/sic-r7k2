@@ -53,6 +53,7 @@ def main(argv=None):
     ap.add_argument("--mode", choices=["full", "incremental"], default="incremental")
     ap.add_argument("--sources", help="lista separada por comas (por defecto, las habilitadas)")
     ap.add_argument("--max-pages", type=int, help="tope de páginas por búsqueda (desarrollo)")
+    ap.add_argument("--pipeline-only", action="store_true", help="no scrapea; solo dedupe/geo/score/export")
     args = ap.parse_args(argv)
 
     cfg = yaml.safe_load(open("config.yaml"))
@@ -64,6 +65,9 @@ def main(argv=None):
 
     conn = db.connect()
     db.init(conn)
+    if args.pipeline_only:
+        run_pipeline(conn, cfg)
+        return conn.close()
     http = Http(cfg["scraping"])
 
     raw_path = os.environ.get("SCRAPER_RAW")
