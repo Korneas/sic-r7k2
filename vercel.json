@@ -1,7 +1,7 @@
 {
   "framework": null,
   "installCommand": "true",
-  "buildCommand": "printf 'window.MAPBOX_TOKEN = \"%s\";\\n' \"$MAPBOX_TOKEN\" > web/config.js",
+  "buildCommand": "printf 'window.MAPBOX_TOKEN = \"%s\";\\n' \"$MAPBOX_TOKEN\" > web/config.js && curl -fsSL https://github.com/Korneas/sic-r7k2/releases/download/db/web-data.tar.gz | tar xz -C web",
   "outputDirectory": "web",
   "headers": [
     {

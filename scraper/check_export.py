@@ -17,6 +17,7 @@ def main():
     rows = [
         dict(base, id="fr-1", source="fincaraiz", source_id="1", url="https://fr/1"),
         dict(base, id="m2-1", source="metrocuadrado", source_id="1", url="https://m2/1", first_seen="2026-10-05T00:00:00Z"),
+        dict(base, id="fr-2", source="fincaraiz", source_id="2", url="https://fr/2", group_id="g2"),
         dict(base, id="fr-9", source="fincaraiz", source_id="9", url="https://fr/9", operation="rent", group_id="g9"),
     ]
     for r in rows:
@@ -30,6 +31,8 @@ def main():
                  (json.dumps({"c": [80, 70, 50, 60, 50], "discount": 0.18, "upside": 0.25, "tags": ["rebaja"], "pd": -0.032,
                               "dom": 44, "k": 12, "comps_info": "x"}), json.dumps([{"k": "approx", "pts": 0, "why": "w"}]),
                  json.dumps({"max_offer_70": 305000000, "upside_cop": 1})))
+    conn.execute("INSERT INTO listing_score VALUES ('fr-2','2026-11-14',NULL,?,NULL,NULL,NULL,NULL,NULL,NULL)",
+                 (json.dumps({"c": None, "discount": None, "upside": None, "tags": None, "pd": None, "dom": None}),))
     conn.commit()
 
     out = tmp / "web-data"
@@ -38,7 +41,10 @@ def main():
     export.run(conn, {"score": {"weights": {"c1_discount": 1}}}, out_dir=out)
 
     ls = json.loads((out / "listings.json").read_text())["listings"]
-    assert len(ls) == 1 and ls[0]["id"] == "fr-1", ls
+    assert sorted(l["id"] for l in ls) == ["fr-1", "fr-2"], ls
+    n = [l for l in ls if l["id"] == "fr-2"][0]
+    assert n["s"] is None and n["c"] == [0] * 5 and n["d"] == 0 and n["tags"] == [], n
+    ls = [l for l in ls if l["id"] == "fr-1"]
     assert ls[0]["src"] == ["fr", "m2"] and ls[0]["s"] == 71.2 and ls[0]["cm"] == 22 and ls[0]["lat"] == 3.41, ls[0]
     shard = out / "detail" / (hashlib.md5(b"fr-1").hexdigest()[:2] + ".json")
     d = json.loads(shard.read_text())["fr-1"]

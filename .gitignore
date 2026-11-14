@@ -6,3 +6,4 @@ __pycache__/
 data/raw/
 web/config.js
 data/sic.db
+web/data/

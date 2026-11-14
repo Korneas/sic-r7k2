@@ -174,14 +174,18 @@ def _build(conn, cfg, out, dedupe):
             skipped += 1
             continue
         comp = (_j(sc["components"], {}) if sc else {}) or {}
+        if not isinstance(comp, dict):
+            comp = {}
         pens = (_j(sc["penalties"], []) if sc else []) or []
+        cc = comp.get("c") or [0, 0, 0, 0, 0]
+        pens = [p for p in pens if isinstance(p, dict)]
         mem = sorted(members.get(gid, [r]), key=lambda x: (x["first_seen"] or "", x["id"]))
         act = [m for m in mem if m["status"] == "active" and m["operation"] == "sale"] or mem
         src = sorted({PREFIX.get(m["source"], m["source"]) for m in act}, key=lambda s: (s != "fr", s))
         fs = (gfs.get(gid) or r["first_seen"] or today)[:10]
         photos = _j(r["photos"], []) or []
         hist = _history(conn, [m["id"] for m in mem])
-        if "pd" in comp:
+        if comp.get("pd") is not None:
             pd = comp["pd"]
         else:
             pd = round(hist[-1]["p"] / hist[0]["p"] - 1, 3) if len(hist) > 1 and hist[0]["p"] else None
@@ -189,6 +193,8 @@ def _build(conn, cfg, out, dedupe):
         if dom is None:
             dom = (datetime.fromisoformat(today) - datetime.fromisoformat(fs)).days
         score = sc["score"] if sc else None
+        if not isinstance(comp, dict):
+            comp = {}
         if score is not None:
             n_scored += 1
         comuna = _int(g["comuna"]) if g is not None else None
@@ -200,10 +206,10 @@ def _build(conn, cfg, out, dedupe):
             "age": r["age_years"], "br": (g["barrio"] if g is not None and g["barrio"] else r["neighborhood_portal"]),
             "brc": g["barrio_code"] if g is not None else None, "cm": comuna,
             "lat": round(lat, 5), "lng": round(lng, 5), "gp": "e" if r["geo_precision"] == "exact" else "b",
-            "s": _r(score, 1), "c": [round(x) for x in comp.get("c", [0, 0, 0, 0, 0])],
-            "d": _r(comp.get("discount", 0), 3), "up": _r(comp.get("upside", 0), 3),
+            "s": _r(score, 1), "c": [round(x or 0) for x in cc],
+            "d": _r(comp.get("discount") or 0, 3), "up": _r(comp.get("upside") or 0, 3),
             "conf": _r(sc["confidence"], 2) if sc and sc["confidence"] is not None else 0,
-            "tags": comp.get("tags", []), "pen": pens, "img": photos[0] if photos else None,
+            "tags": comp.get("tags") or [], "pen": pens, "img": photos[0] if photos else None,
             "fs": fs, "pd": _r(pd, 3), "src": src, "dom": dom,
         })
 
@@ -214,15 +220,18 @@ def _build(conn, cfg, out, dedupe):
             if m["url"] and m["url"] not in urls:
                 urls.append(m["url"])
         flip = (_j(sc["flip"], {}) if sc else {}) or {}
+        if not isinstance(flip, dict):
+            flip = {}
+        cmp_ = [c for c in ((_j(sc["comps"], []) if sc else []) or []) if isinstance(c, dict)]
         shards.setdefault(hashlib.md5(cid.encode()).hexdigest()[:2], {})[cid] = {
             "title": r["title"], "desc": r["description"], "photos": photos[:20], "urls": urls,
             "admin": r["admin_fee"], "floor": r["floor"], "area_lot": r["area_lot_m2"], "history": hist,
             "expected_m2": _r(sc["expected_m2"], 0) if sc else None, "arv_m2": _r(sc["arv_m2"], 0) if sc else None,
             "max_offer_70": flip.get("max_offer_70"),
-            "comps": (_j(sc["comps"], []) if sc else []) or [], "comps_info": comp.get("comps_info"),
-            "amen": _j(ar, []) or [],
-            "risks": [{"k": x.get("k"), "why": x.get("why")} for x in (_j(g["risks"], []) if g is not None else []) or []],
-            "projects": _j(g["projects"], []) if g is not None else [],
+            "comps": cmp_, "comps_info": comp.get("comps_info"),
+            "amen": [a for a in (_j(ar, []) or []) if isinstance(a, dict)],
+            "risks": [{"k": x.get("k"), "why": x.get("why")} for x in (_j(g["risks"], []) if g is not None else []) or [] if isinstance(x, dict)],
+            "projects": (_j(g["projects"], []) if g is not None else []) or [],
             "zone": ({"median_m2": z["median_m2"], "trend_12m": z["trend_12m"], "dom": z["dom"], "yield": z["yield"]} if z else None),
         }
 

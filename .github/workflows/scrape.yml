@@ -54,7 +54,10 @@ jobs:
           git config user.email "scraper-bot@users.noreply.github.com"
           gh release view db >/dev/null 2>&1 || gh release create db --title db --notes "SQLite de sic (se sobrescribe en cada corrida)"
           gh release upload db /tmp/sic.db.gz --clobber
-          git add web/data
-          git diff --cached --quiet && { echo "sin cambios"; exit 0; }
+          # la web descarga sus datos del release al compilar en Vercel; el commit de last_run.json dispara el deploy
+          tar czf /tmp/web-data.tar.gz -C web data
+          gh release upload db /tmp/web-data.tar.gz --clobber
+          python -c "import json;m=json.load(open('web/data/meta.json'));json.dump({'generated_at':m['generated_at'],'counts':m.get('counts'),'runs':m.get('runs',[])[-2:]},open('data/last_run.json','w'),ensure_ascii=False,indent=1)"
+          git add data/last_run.json
           git commit -q -m "data: ${{ steps.mode.outputs.mode }} $(TZ=America/Bogota date +'%Y-%m-%d %H:%M') COT"
           git push
