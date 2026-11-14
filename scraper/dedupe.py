@@ -1,13 +1,14 @@
 """Deduplicación entre portales y republicadas (PLAN RF3, RF1.4): pone listing.group_id a TODAS las ofertas.
 
-Dos ofertas son la misma propiedad si: misma operación, tipo y habitaciones; mismo estrato si ambas lo
-reportan; área a ±5% o ±3 m² (si ambas la tienen); precio a ±5%; y
-  - ambas geo exactas: distancia < 250 m;
-  - alguna aproximada: mismo barrio del portal (normalizado) y ambas con área.
+Dos ofertas son la misma propiedad si: misma operación, tipo y habitaciones; mismo estrato y baños si ambas
+los reportan; y
+  - ambas geo exactas: distancia < 250 m, precio ±5%, área ±5% o ±3 m² (si ambas la tienen);
+  - alguna aproximada: mismo barrio del portal (normalizado), ambas con área y estrato, precio ±2%, área ±2%,
+    parqueaderos iguales si ambas los reportan.
 Una retirada solo empata con ofertas que aparecieron a lo sumo 60 días después de su retiro (republicadas).
-Grupos por union-find; group_id = miembro con first_seen más antiguo (empate: id menor).
+Grupos por enlace completo (todos los miembros empatan entre sí, para no encadenar), máximo MAX_GROUP miembros
+y máximo MAX_PER_SOURCE activas por portal; group_id = miembro con first_seen más antiguo (empate: id menor).
 Candidatos: cubetas (operación, tipo, habitaciones) ordenadas por precio y ventana de ±5% → O(n·w), sin O(n²).
-Si un grupo pasa de MAX_GROUP miembros (encadenamiento), se rehace con precio a ±2% y se avisa.
 """
 import math
 from collections import defaultdict
@@ -15,14 +16,17 @@ from datetime import datetime, timedelta
 
 from scraper.db import norm
 
-PRICE_TOL, PRICE_TOL_STRICT = 0.05, 0.02
-AREA_TOL, AREA_ABS = 0.05, 3.0
+PRICE_TOL, AREA_TOL, AREA_ABS = 0.05, 0.05, 3.0      # coordenadas exactas en ambas
+PRICE_TOL_APPROX, AREA_TOL_APPROX = 0.02, 0.02       # alguna aproximada (solo barrio)
 MAX_DIST_M = 250.0
 REPUBLISH_DAYS = 60
 MAX_GROUP = 6
+SAME_SOURCE_TOL = 0.02  # dos activas del mismo portal (repost de otra agencia): precio y área ±2%
+NO_HOOD = {"", "na", "n/a", "n a", "sin barrio", "otro", "otros", "cali"}
+MAX_PER_SOURCE = 2  # activas de un mismo portal por grupo (las retiradas son reposts y no cuentan)
 
-COLS = ("id, operation, property_type, bedrooms, stratum_portal, area_m2, price, lat, lng, geo_precision, "
-        "neighborhood_portal, status, first_seen, removed_at")
+COLS = ("id, source, operation, property_type, bedrooms, bathrooms, parking, stratum_portal, area_m2, price, "
+        "lat, lng, geo_precision, neighborhood_portal, status, first_seen, removed_at")
 
 
 def _ts(s):
@@ -45,56 +49,83 @@ def _alive_for(x, other):
     return other["_first"] <= x["_removed"] + timedelta(days=REPUBLISH_DAYS)
 
 
-def is_same(a, b, price_tol=PRICE_TOL):
-    """a, b en la misma cubeta (operación, tipo, habitaciones) y con precio."""
-    if a["stratum_portal"] is not None and b["stratum_portal"] is not None and a["stratum_portal"] != b["stratum_portal"]:
-        return False
-    pa, pb = a["price"], b["price"]
-    if abs(pa - pb) > price_tol * max(pa, pb):
-        return False
+def _rel(x, y):
+    return abs(x - y) / max(x, y)
+
+
+def _differs(x, y):
+    return x is not None and y is not None and x != y
+
+
+def match(a, b):
+    """a, b en la misma cubeta (operación, tipo, habitaciones) y con precio. Devuelve un costo (menor = más
+    parecidas) o None si no son la misma propiedad."""
+    if _differs(a["stratum_portal"], b["stratum_portal"]) or _differs(a["bathrooms"], b["bathrooms"]):
+        return None
+    if not (_alive_for(a, b) and _alive_for(b, a)):
+        return None
+    dp = _rel(a["price"], b["price"])
     aa, ab = a["area_m2"], b["area_m2"]
-    has_area = bool(aa and ab)
-    if has_area and abs(aa - ab) > max(AREA_ABS, AREA_TOL * max(aa, ab)):
-        return False
+    da = _rel(aa, ab) if aa and ab else None
+    if a["source"] == b["source"] and a["status"] == b["status"] == "active":
+        # mismo portal, ambas vigentes: lo normal es que sean unidades distintas del mismo edificio
+        if da is None or dp > SAME_SOURCE_TOL or da > SAME_SOURCE_TOL:
+            return None
     if a["geo_precision"] == "exact" and b["geo_precision"] == "exact":
-        if _meters(a, b) >= MAX_DIST_M:
-            return False
-    elif not (has_area and a["_hood"] and a["_hood"] == b["_hood"]):
-        return False
-    return _alive_for(a, b) and _alive_for(b, a)
+        if dp > PRICE_TOL or (da is not None and abs(aa - ab) > max(AREA_ABS, AREA_TOL * max(aa, ab))):
+            return None
+        dist = _meters(a, b)
+        if dist >= MAX_DIST_M:
+            return None
+        return dp + (da or AREA_TOL) + dist / MAX_DIST_M * 0.05
+    # alguna aproximada: mismo barrio y todo más estricto
+    if da is None or not a["_hood"] or a["_hood"] != b["_hood"]:
+        return None
+    if a["stratum_portal"] is None or b["stratum_portal"] is None or _differs(a["parking"], b["parking"]):
+        return None
+    if dp > PRICE_TOL_APPROX or da > AREA_TOL_APPROX:
+        return None
+    return dp + da + 0.05  # penaliza la falta de coordenada frente a un empate exacto
 
 
-class _UF:
-    def __init__(self, ids):
-        self.p = {i: i for i in ids}
-
-    def find(self, x):
-        while self.p[x] != x:
-            self.p[x] = self.p[self.p[x]]
-            x = self.p[x]
-        return x
-
-    def union(self, a, b):
-        ra, rb = self.find(a), self.find(b)
-        if ra != rb:
-            self.p[rb] = ra
-
-
-def _cluster(rows, price_tol):
-    """rows: misma cubeta. Ventana deslizante por precio. Devuelve lista de grupos (listas de filas)."""
+def _cluster(rows):
+    """rows: misma cubeta. Enlace completo aglomerativo: se unen los pares en orden de costo y dos grupos solo
+    se fusionan si TODOS sus pares cruzados empatan, el tamaño no pasa de MAX_GROUP y ningún portal queda con
+    más de MAX_PER_SOURCE activas. Candidatos por ventana de precio ±5% (orden por precio)."""
     rows = sorted(rows, key=lambda r: r["price"])
-    uf = _UF(r["id"] for r in rows)
+    edges, ok = [], set()
     for i, a in enumerate(rows):
-        hi = a["price"] / (1 - price_tol)  # b ≤ hi  ⇔  b - a ≤ tol·b
+        hi = a["price"] / (1 - PRICE_TOL)  # b ≤ hi  ⇔  b - a ≤ tol·b
         for b in rows[i + 1:]:
             if b["price"] > hi:
                 break
-            if is_same(a, b, price_tol):
-                uf.union(a["id"], b["id"])
-    groups = defaultdict(list)
-    for r in rows:
-        groups[uf.find(r["id"])].append(r)
-    return list(groups.values())
+            c = match(a, b)
+            if c is not None:
+                edges.append((c, a["id"], b["id"]))
+                ok.add((a["id"], b["id"]))
+                ok.add((b["id"], a["id"]))
+    by_id = {r["id"]: r for r in rows}
+    of = {r["id"]: [r["id"]] for r in rows}  # id -> lista compartida de miembros de su grupo
+    rejected = 0
+    for _, x, y in sorted(edges):
+        gx, gy = of[x], of[y]
+        if gx is gy:
+            continue
+        if len(gx) + len(gy) > MAX_GROUP or not all((u, v) in ok for u in gx for v in gy):
+            rejected += 1
+            continue
+        per = defaultdict(int)
+        for m in gx + gy:
+            if by_id[m]["status"] == "active":
+                per[by_id[m]["source"]] += 1
+        if max(per.values(), default=0) > MAX_PER_SOURCE:
+            rejected += 1
+            continue
+        gx.extend(gy)
+        for m in gy:
+            of[m] = gx
+    groups = {id(g): g for g in of.values()}
+    return [[by_id[m] for m in g] for g in groups.values()], rejected
 
 
 def _order(r):
@@ -102,36 +133,32 @@ def _order(r):
 
 
 def group_rows(rows):
-    """Lista de dicts de listing -> {id: group_id}. Puro (sin DB) para poder probarlo."""
+    """Lista de dicts de listing -> ({id: group_id}, fusiones rechazadas). Puro (sin DB) para poder probarlo."""
     buckets, out = defaultdict(list), {}
     for r in rows:
-        r["_hood"] = norm(r["neighborhood_portal"])
+        h = norm(r["neighborhood_portal"])
+        r["_hood"] = "" if h in NO_HOOD else h
         r["_first"], r["_removed"] = _ts(r["first_seen"]), _ts(r["removed_at"])
         if r["price"] and r["operation"] and r["property_type"]:
             buckets[(r["operation"], r["property_type"], r["bedrooms"])].append(r)
         else:
             out[r["id"]] = r["id"]
-    split = 0
+    rejected = 0
     for rs in buckets.values():
-        for g in _cluster(rs, PRICE_TOL):
-            if len(g) > MAX_GROUP:
-                sub = _cluster(g, PRICE_TOL_STRICT)
-                split += 1
-                print(f"[dedupe] grupo de {len(g)} (> {MAX_GROUP}) partido con precio ±2% en {len(sub)}: "
-                      f"{','.join(sorted(r['id'] for r in g)[:8])}…")
-                g_list = sub
-            else:
-                g_list = [g]
-            for sg in g_list:
-                gid = min(sg, key=_order)["id"]
-                for r in sg:
-                    out[r["id"]] = gid
-    return out, split
+        groups, rej = _cluster(rs)
+        rejected += rej
+        for g in groups:
+            gid = min(g, key=_order)["id"]
+            for r in g:
+                out[r["id"]] = gid
+    return out, rejected
 
 
 def run(conn):
-    rows = [dict(r) for r in conn.execute(f"SELECT {COLS} FROM listing")]
-    groups, split = group_rows(rows)
+    cur = conn.execute(f"SELECT {COLS} FROM listing")
+    names = [d[0] for d in cur.description]
+    rows = [dict(zip(names, r)) for r in cur]
+    groups, rejected = group_rows(rows)
     conn.executemany("UPDATE listing SET group_id=? WHERE id=?", [(g, i) for i, g in groups.items()])
     conn.commit()
     sizes = defaultdict(int)
@@ -140,9 +167,13 @@ def run(conn):
     multi = {g for g, n in sizes.items() if n > 1}
     grouped = sum(sizes[g] for g in multi)
     pct = 100 * grouped / len(rows) if rows else 0
+    hist = defaultdict(int)
+    for g in multi:
+        hist[sizes[g]] += 1
     print(f"[dedupe] {len(rows)} ofertas, {len(multi)} grupos de ≥2, {grouped} agrupadas ({pct:.1f}%), "
-          f"{split} grupos partidos por tamaño")
-    return dict(listings=len(rows), groups=len(multi), grouped=grouped, split=split)
+          f"tamaños {dict(sorted(hist.items()))}, {rejected} fusiones rechazadas (enlace completo/tope/portal)")
+    return dict(listings=len(rows), groups=len(multi), grouped=grouped, pct=round(pct, 1),
+                sizes=dict(sorted(hist.items())), rejected=rejected)
 
 
 def canonical_ids(conn, operation="sale"):

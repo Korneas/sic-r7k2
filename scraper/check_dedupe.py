@@ -52,7 +52,16 @@ def main():
         # republicada > 60 días después del retiro → no agrupa
         db.upsert(conn, [rec("31", price=600_000_000, area=120, lat=3.46, lng=-76.51, hood="San Fernando",
                              bedrooms=5)], T_LATE)
-        # cadena: 8 unidades iguales a 3% de precio una de otra → la cadena se parte (tope de 6)
+        # aproximada estricta (±2%), tope por portal y baños distintos
+        db.upsert(conn, [
+            rec("40", price=400_000_000, area=90, lat=None, lng=None, hood="Valle del Lili"),
+            rec("40", source="metrocuadrado", price=404_000_000, area=91, lat=None, lng=None, hood="Valle del Lili"),
+            rec("41", source="metrocuadrado", price=412_000_000, area=90, lat=None, lng=None, hood="Valle del Lili"),
+            *[rec(f"5{i}", price=700_000_000, area=200, lat=3.47, lng=-76.49, hood="X") for i in range(3)],
+            rec("60", price=900_000_000, area=99, lat=3.48, lng=-76.48, hood="Y", bathrooms=2),
+            rec("60", source="metrocuadrado", price=900_000_000, area=99, lat=3.48, lng=-76.48, hood="Y", bathrooms=3),
+        ], T4)
+        # cadena: 8 unidades a 3% de precio una de otra → sin encadenar
         db.upsert(conn, [rec(f"c{i}", source="metrocuadrado", price=int(200_000_000 * 1.03 ** i), area=70,
                              lat=3.43, lng=-76.55, hood="Chain") for i in range(8)], T4)
 
@@ -66,7 +75,11 @@ def main():
         assert g("fr-30") == "fr-30" and g("fr-31") == "fr-31"
         chain = [g(f"m2-c{i}") for i in range(8)]
         assert all(chain.count(x) <= dedupe.MAX_GROUP for x in chain), chain
-        assert s["split"] >= 1, s
+        assert all(chain.count(x) <= 2 for x in chain), chain  # enlace completo: c_i solo empata con vecinos
+        assert g("fr-40") == g("m2-40") and g("m2-41") == "m2-41"  # aproximada: +3% de precio ya no agrupa
+        trio = [g(f"fr-5{i}") for i in range(3)]
+        assert max(trio.count(x) for x in trio) == 2, trio  # máx. 2 activas del mismo portal por grupo
+        assert g("fr-60") != g("m2-60")  # baños distintos
         assert conn.execute("SELECT COUNT(*) FROM listing WHERE group_id IS NULL").fetchone()[0] == 0
 
         can = dedupe.canonical_ids(conn)
@@ -84,7 +97,7 @@ def main():
         rnd = random.Random(1)
         rows = []
         for i in range(25_000):
-            rows.append(dict(id=f"x-{i}", operation=rnd.choice(["sale", "sale", "sale", "rent"]),
+            rows.append(dict(id=f"x-{i}", source=rnd.choice(["fincaraiz", "metrocuadrado"]), bathrooms=rnd.randint(1, 4), parking=rnd.randint(0, 2), operation=rnd.choice(["sale", "sale", "sale", "rent"]),
                              property_type=rnd.choice(["apartamento", "casa"]), bedrooms=rnd.randint(1, 5),
                              stratum_portal=rnd.randint(2, 6), area_m2=rnd.uniform(40, 250),
                              price=rnd.randint(100, 1500) * 1_000_000, lat=3.35 + rnd.random() * 0.15,
