@@ -68,6 +68,9 @@ def _trend_12m(snaps):
     return round(math.exp(b) - 1, 4)
 
 
+MIN_ZONE_N = 5
+
+
 def _zones(conn, names):
     rows = conn.execute("SELECT * FROM zone_stats WHERE type='all' ORDER BY barrio_code, date").fetchall()
     by = {}
@@ -77,8 +80,9 @@ def _zones(conn, names):
     for code, rs in by.items():
         last = rs[-1]
         nm = names.get(code, {})
+        ok = (last["n_sale"] or 0) >= MIN_ZONE_N  # ponytail: mediana con < 5 ofertas es ruido; se muestra el conteo, no el valor
         out[code] = {"name": nm.get("name"), "comuna": nm.get("comuna"), "n_sale": last["n_sale"],
-                     "median_m2": _r(last["median_m2_sale"], 0), "trend_12m": _trend_12m([(r["date"], r["median_m2_sale"]) for r in rs]),
+                     "median_m2": _r(last["median_m2_sale"], 0) if ok else None, "trend_12m": _trend_12m([(r["date"], r["median_m2_sale"]) for r in rs]),
                      "dom": _r(last["median_dom"], 0), "yield": _r(last["gross_yield"], 4), "n_rent": last["n_rent"]}
     return out
 

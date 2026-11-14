@@ -63,7 +63,7 @@
     <p>Para estar en el ranking una oferta necesita precio, área mayor a 20 m², estrato 2 o más y descuento positivo. Lo demás aparece en gris con la etiqueta &laquo;no es oportunidad&raquo;.</p>
 
     <h2 id="upside">Upside y la regla del 70%</h2>
-    <p>El <strong>ARV</strong> (valor después de arreglar) por m² es el percentil 75 de los comparables en buen estado: de 15 años de antigüedad o menos, o que digan &laquo;remodelado&raquo; o &laquo;para estrenar&raquo;. Si hay menos de 5, se usa el percentil 75 de todos. El <strong>upside</strong> es <code>ARV por m² ÷ precio por m² − 1</code>, también expresado en pesos. Si es cero o negativo, el componente vale 0.</p>
+    <p>El <strong>ARV</strong> (valor después de arreglar) por m² es el percentil 75 de los comparables en buen estado: de 15 años de antigüedad o menos, o que digan &laquo;remodelado&raquo; o &laquo;para estrenar&raquo;. Si hay menos de 5, se usa el percentil 75 de todos. Para un inmueble usado no cuentan los comparables de obra nueva (8 años o menos), porque un remodelado no cobra la prima de estreno, y el ARV nunca pasa de 1,35 veces la mediana de los comparables (el percentil 85 de esa relación en Cali): por encima, el P75 lo está jalando otro segmento, como torres nuevas o de lujo. El <strong>upside</strong> es <code>ARV por m² ÷ precio por m² − 1</code>, también expresado en pesos. Se muestra con tope: más de 80% aparece como &laquo;≥ +80%&raquo;, porque a esa distancia casi siempre hay un error de datos. Si es cero o negativo, el componente vale 0.</p>
     <p>La <strong>referencia del 70%</strong> es <code>ARV × 0,70</code>: la regla del flip dice que no conviene pagar más de ese porcentaje del valor final, y baja a 60 a 65% en mercados lentos o riesgosos. <strong>Aquí no se descuentan costos de remodelación</strong>: se mide el techo de precio de la zona, no la ganancia neta. Hay que sumar obra, gastos de compra y venta, y tiempo por cuenta propia.</p>
     <p>Si el aviso o la antigüedad sugieren &laquo;para remodelar&raquo; (texto como &laquo;original&raquo; o más de 20 años), aparece la etiqueta de remodelar. Es informativa: no resta puntos.</p>
 
@@ -98,6 +98,7 @@
         <tr><td>Homicidios a 500 m en 24 meses: percentil 90 de Cali o más (percentil 75: −7)</td><td class="r">−15</td><td>Seguridad y Justicia (IDESC)</td></tr>
         <tr><td>Barrio en programa de mejoramiento integral o precario</td><td class="r">−10</td><td>Vivienda (IDESC)</td></tr>
         <tr><td>Ruido nocturno alto</td><td class="r">−5</td><td>DAGMA</td></tr>
+        <tr><td>Casa de uso mixto o multifamiliar (&laquo;uso mixto&raquo;, &laquo;casa comercial&raquo;, &laquo;pisos independientes&raquo;, &laquo;multifamiliar&raquo;…)</td><td class="r">−10</td><td>Es otro producto (renta o comercio): frente a casas residenciales el descuento sale inflado</td></tr>
         <tr><td>Palabras de riesgo legal en el aviso (derechos, proindiviso, sucesión, sin escritura, posesión, remate, embargo)</td><td class="r">−10</td><td>Texto del aviso. Puede ser una oportunidad, por eso no se oculta</td></tr>
         <tr><td>Coordenada aproximada</td><td class="r">0</td><td>No resta, baja la confianza: el análisis usa el barrio</td></tr>
       </tbody>
@@ -188,7 +189,7 @@
       var L = meta.layers || {};
       var lk = Object.keys(L).sort();
       $('#layersBody').innerHTML = lk.length ? lk.map(function (k) {
-        return '<tr><td>' + esc(LAYER[k] || k) + '</td><td class="num">' + esc(fmtDay(L[k])) + '</td></tr>';
+        return '<tr><td>' + esc(LAYER[k] || k.replace(/_/g, ' ').replace(/^./, function (c) { return c.toUpperCase(); })) + '</td><td class="num">' + esc(fmtDay(L[k])) + '</td></tr>';
       }).join('') : '<tr><td colspan="2">Sin información de capas.</td></tr>';
 
       var runs = (meta.runs || []).slice().sort(function (a, b) { return String(b.at).localeCompare(String(a.at)); });

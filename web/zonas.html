@@ -83,7 +83,7 @@
     function computeBins() {
       var m = metric;
       if (m.div) { bins = m.div; return; }
-      var xs = rows.map(function (r) { return r[m.k]; }).filter(function (v) { return v != null; }).sort(function (a, b) { return a - b; });
+      var xs = rows.filter(function (r) { return !r.agg; }).map(function (r) { return r[m.k]; }).filter(function (v) { return v != null; }).sort(function (a, b) { return a - b; });
       var b = [];
       [0.2, 0.4, 0.6, 0.8].forEach(function (p) {
         if (!xs.length) return;
@@ -107,7 +107,10 @@
         items.push('<li><i style="background:' + pal[i] + '"></i>' + esc(t) + '</li>');
       }
       items.push('<li><i style="background:' + NODATA + '"></i>sin datos</li>');
-      $('#zLegend').innerHTML = '<b>' + esc(metric.label) + ' (' + esc(metric.unit) + ')</b><ul>' + items.join('') + '</ul>';
+      var none = rows.length && !rows.some(function (r) { return r[metric.k] != null; });
+      $('#zLegend').innerHTML = '<b>' + esc(metric.label) + ' (' + esc(metric.unit) + ')</b>' + (none
+        ? '<p class="z-hint" style="margin:6px 0 0;max-width:230px">Aún no hay datos de esta métrica: se calcula con el historial de ofertas retiradas y precios de meses anteriores, que apenas empieza a acumularse. Todos los barrios aparecen en gris.</p><ul><li><i style="background:' + NODATA + '"></i>sin datos</li></ul>'
+        : '<ul>' + items.join('') + '</ul>');
       $('#zHint').textContent = metric.hint;
     }
     function paint() {
@@ -118,7 +121,10 @@
       }
     }
     function renderMetrics() {
-      $('#metrics').innerHTML = M.map(function (m) { return '<button type="button" role="radio" aria-checked="' + (m === metric) + '" data-k="' + m.k + '">' + esc(m.label) + '</button>'; }).join('');
+      $('#metrics').innerHTML = M.map(function (m) {
+        var none = rows.length && !rows.some(function (r) { return r[m.k] != null; });
+        return '<button type="button" role="radio" aria-checked="' + (m === metric) + '" data-k="' + m.k + '"' + (none ? ' title="Aún sin datos: se necesita más historial de ofertas"' : '') + '>' + esc(m.label) + (none ? ' <small>(sin datos aún)</small>' : '') + '</button>';
+      }).join('');
     }
     $('#metrics').addEventListener('click', function (e) {
       var b = e.target.closest('button[data-k]'); if (!b) return;
@@ -140,7 +146,7 @@
       });
       var cell = function (r, k, f) { return r[k] == null ? '<td class="r nodata" aria-label="sin datos">—</td>' : '<td class="r num">' + f(r[k]) + '</td>'; };
       $('#ztb').innerHTML = list.length ? list.map(function (r) {
-        return '<tr data-code="' + esc(r.code) + '"' + (r.code === hotCode ? ' class="hot"' : '') + '><td><a href="index.html#barrio=' + encodeURIComponent(r.code) + '" title="Ver ofertas en ' + esc(r.name) + '">' + esc(r.name) + '</a><br><small class="z-hint">Comuna ' + esc(r.comuna) + '</small></td>' +
+        return '<tr data-code="' + esc(r.code) + '"' + (r.code === hotCode ? ' class="hot"' : '') + '><td><a href="index.html#' + (r.agg ? 'comuna=' + r.code.slice(1) : 'barrio=' + encodeURIComponent(r.code)) + '" title="Ver ofertas en ' + esc(r.name) + '">' + esc(r.name) + '</a><br><small class="z-hint">' + (r.agg ? 'Todos los barrios de la comuna' : r.comuna == null ? 'Fuera de las comunas' : 'Comuna ' + esc(r.comuna)) + '</small></td>' +
           cell(r, 'median_m2', MBY.median_m2.fmt) + cell(r, 'trend_12m', MBY.trend_12m.fmt) + cell(r, 'dom', MBY.dom.fmt) + cell(r, 'yield', MBY.yield.fmt) + cell(r, 'n_sale', MBY.n_sale.fmt) + '</tr>';
       }).join('') : '<tr><td colspan="6">Ningún barrio coincide con «' + esc(q) + '».</td></tr>';
       document.querySelectorAll('#zt th').forEach(function (th) {
@@ -232,7 +238,7 @@
       $('#fixture').hidden = !meta.fixture;
       var bad = SIC.runsWithErrors(meta); if (bad.length) $('#runWarn').hidden = false;
       gj.features.forEach(function (f) { var z = zones[f.properties.code]; if (z && z.name) f.properties.name = z.name; });
-      rows = Object.keys(zones).map(function (c) { var z = zones[c]; return { code: c, name: z.name || c, comuna: z.comuna, median_m2: val(c, 'median_m2'), trend_12m: val(c, 'trend_12m'), dom: val(c, 'dom'), yield: val(c, 'yield'), n_sale: val(c, 'n_sale') }; });
+      rows = Object.keys(zones).map(function (c) { var z = zones[c], agg = !z.name && /^C\d+$/.test(c); return { code: c, agg: agg, name: agg ? 'Comuna ' + c.slice(1) + ' (total)' : (z.name || c), comuna: agg ? null : z.comuna, median_m2: val(c, 'median_m2'), trend_12m: val(c, 'trend_12m'), dom: val(c, 'dom'), yield: val(c, 'yield'), n_sale: val(c, 'n_sale') }; });
       renderMetrics(); paint(); renderTable();
       if (map && map.loaded() && map.__go) map.__go();
     }).catch(function (e) {

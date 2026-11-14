@@ -23,6 +23,7 @@
   /* COP abreviado: $320M, $1.250M; precio/m²: $4,2M. */
   function cop(p) {
     if (p == null) return '—';
+    if (p >= 1e12) return '$' + NF1.format(p / 1e12) + ' bill.';
     if (p >= 1e6) return '$' + NF.format(Math.round(p / 1e6)) + 'M';
     return '$' + NF.format(p);
   }
@@ -52,7 +53,10 @@
     { k: 'Liquidez', w: 0.10, note: 'qué tan rápido se vende en la zona' }
   ];
   var PEN_SHORT = { inund_nm: 'Inundación', inund: 'Inundable', masa: 'Ladera', homic: 'Homicidios', homic75: 'Homicidios', mejora: 'Mejoramiento', ruido: 'Ruido', legal: 'Legal', aprox: 'Ubic. aprox.' };
-  var TAGS = { nueva: 'Nueva', rebaja: 'Rebaja', remodelar: '🔨 Para remodelar', legal: '⚖️ Legal', sospechoso: 'Dato sospechoso' };
+  var HIDE_TAGS = { no_oportunidad: 1 };
+  var TAGS = { nueva: 'Nueva', rebaja: 'Rebaja', remodelar: '🔨 Para remodelar', legal: '⚖️ Legal', sospechoso: 'Dato sospechoso', mixto: 'Uso mixto/renta' };
+  var UP_CAP = 0.8; // config score.arv.upside_cap: el upside se guarda con tope
+  function upTxt(x) { return (x >= UP_CAP - 0.0005 ? '≥ ' : '') + pct(x, true); }
   var AMEN = { mio: 'MIO troncal', mio_stop: 'Parada MIO', mall: 'Centros comerciales', super: 'Supermercados', park: 'Parques', health: 'Clínicas y hospitales', edu: 'Colegios y universidades', food: 'Restaurantes y cafés', bank: 'Bancos y droguerías', gym: 'Deporte' };
   var PROJ = { renov: 'Renovación urbana', plan_parcial: 'Plan parcial', mio_proy: 'Troncal MIO proyectada', corredor_verde: 'Corredor Verde', tren: 'Tren de cercanías', plusvalia: 'Plusvalía' };
 
@@ -94,14 +98,14 @@
     { k: 'beds', label: 'Habitaciones', type: 'min', field: 'b', opts: [1, 2, 3, 4], show: function (v) { return v + '+ hab.'; } },
     { k: 'baths', label: 'Baños', type: 'min', field: 'ba', opts: [1, 2, 3, 4], show: function (v) { return v + '+ baños'; } },
     { k: 'park', label: 'Parqueadero', type: 'min', field: 'pk', opts: [1, 2, 3], show: function (v) { return v + '+ parq.'; } },
-    { k: 'estrato', label: 'Estrato', type: 'multi', field: 'e', opts: [[2, '2'], [3, '3'], [4, '4'], [5, '5'], [6, '6']],
+    { k: 'estrato', label: 'Estrato', type: 'multi', field: 'e', opts: [[1, '1'], [2, '2'], [3, '3'], [4, '4'], [5, '5'], [6, '6']],
       show: function (v) { return 'Estrato ' + v.slice().sort().join(', '); } },
     { k: 'tipo', label: 'Tipo', type: 'multi', field: 't', opts: [['a', 'Apartamento'], ['c', 'Casa']],
       show: function (v) { return v.length === 2 ? 'Apto y casa' : (v[0] === 'a' ? 'Apartamento' : 'Casa'); } },
     { k: 'zona', label: 'Comuna o barrio', type: 'zona',
       show: function (v) {
         var n = v.cm.length + v.br.length;
-        if (n === 1) return v.cm.length ? 'Comuna ' + v.cm[0] : (zones[v.br[0]] ? zones[v.br[0]].name : v.br[0]);
+        if (n === 1) return v.cm.length ? (v.cm[0] ? 'Comuna ' + v.cm[0] : 'Fuera de Cali') : (zones[v.br[0]] ? zones[v.br[0]].name : v.br[0]);
         return n + ' zonas';
       } },
     { k: 'score', label: 'Puntaje mín.', type: 'slider', field: 's', min: 0, max: 95, step: 5, fmt: function (v) { return String(v); },
@@ -150,7 +154,7 @@
         return function (l) { return set.has(String(l[f.field])); };
       case 'zona':
         var cms = new Set(v.cm), brs = new Set(v.br);
-        return function (l) { return cms.has(l.cm) || brs.has(l.brc); };
+        return function (l) { return cms.has(l.cm == null ? 0 : l.cm) || brs.has(l.brc); };
       case 'slider':
         var th = f.pct ? v / 100 : v;
         return function (l) { var x = l[f.field]; return x != null && x >= th; };
@@ -201,7 +205,7 @@
   }
   function updateVisible() {
     var bb = inBounds();
-    visible = bb ? filtered.filter(function (l) { return l.lat >= bb.s && l.lat <= bb.n && l.lng >= bb.w && l.lng <= bb.e; }) : filtered;
+    visible = bb ? filtered.filter(function (l) { return l._geo && l.lat >= bb.s && l.lat <= bb.n && l.lng >= bb.w && l.lng <= bb.e; }) : filtered;
     renderCount(bb);
     renderList(true);
   }
@@ -314,10 +318,10 @@
     var nq = normTxt(q);
     var html = '';
     comunas.forEach(function (c) {
-      var cmMatch = !nq || ('comuna ' + c.cm).indexOf(nq) >= 0;
-      var brs = c.barrios.filter(function (b) { return cmMatch || normTxt(b.name).indexOf(nq) >= 0; });
+      var cmMatch = !nq || ((c.cm ? 'comuna ' + c.cm : 'fuera rural jamundi') + '').indexOf(nq) >= 0;
+      var brs = !c.cm ? [] : c.barrios.filter(function (b) { return cmMatch || normTxt(b.name).indexOf(nq) >= 0; });
       if (!cmMatch && !brs.length) return;
-      html += '<label class="check zona-group"><input type="checkbox" data-cm="' + c.cm + '"' + (v.cm.indexOf(c.cm) >= 0 ? ' checked' : '') + '><span>Comuna ' + c.cm + '</span><small>' + NF.format(c.n) + '</small></label>';
+      html += '<label class="check zona-group"><input type="checkbox" data-cm="' + c.cm + '"' + (v.cm.indexOf(c.cm) >= 0 ? ' checked' : '') + '><span>' + (c.cm ? 'Comuna ' + c.cm : 'Fuera de las comunas (rural, Jamundí…)') + '</span><small>' + NF.format(c.n) + '</small></label>';
       brs.forEach(function (b) {
         html += '<label class="check zona-br"><input type="checkbox" data-br="' + esc(b.code) + '"' + (v.br.indexOf(b.code) >= 0 ? ' checked' : '') + '><span title="' + esc(b.name) + '">' + esc(b.name) + '</span><small>' + NF.format(b.n) + '</small></label>';
       });
@@ -409,20 +413,24 @@
     rendered = end;
     renderEmpty();
   }
+  var nuevaShare = 0;
+  function visTags(l) {
+    return l.tags.filter(function (t) { return !HIDE_TAGS[t] && !(t === 'nueva' && nuevaShare > 0.8); });  // primera corrida: todo es "nueva"
+  }
   function cardHTML(l, i) {
     var photo = l.img
-      ? '<img src="' + esc(l.img) + '" alt="" loading="lazy" decoding="async" width="132" height="112" onerror="this.replaceWith(Object.assign(document.createElement(\'div\'),{className:\'no-photo\',textContent:\'Foto no disponible\'}))">'
+      ? '<img src="' + esc(l.img) + '" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" width="132" height="112" onerror="this.replaceWith(Object.assign(document.createElement(\'div\'),{className:\'no-photo\',textContent:\'Foto no disponible\'}))">'
       : '<div class="no-photo">Sin fotos</div>';
     var deltas = '';
     if (l.d != null) deltas += l.d > 0 ? '<span class="d-good">' + pct(-l.d) + ' vs zona</span>' : '<span class="d-flat">' + pct(-l.d, true) + ' vs zona</span>';
-    if (l.up != null && l.up > 0) deltas += '<span class="d-good">upside ' + pct(l.up, true) + '</span>';
+    if (l.up != null && l.up > 0) deltas += '<span class="d-good">upside ' + upTxt(l.up) + '</span>';
     var meta = '<span class="br" title="' + esc(l.br) + '">' + esc(l.br || 'Barrio sin dato') + '</span>' +
       '<span>E' + (l.e || '?') + '</span>' +
       '<span>' + (l.a ? NF.format(l.a) + ' m²' : 'sin área') + '</span>' +
       (l.b != null ? '<span>' + l.b + ' hab</span>' : '') +
       (l.ba != null ? '<span>' + l.ba + (l.ba === 1 ? ' baño' : ' baños') + '</span>' : '') +
       (l.pk ? '<span>' + l.pk + ' parq</span>' : '<span>sin parq</span>');
-    var badges = l.tags.map(function (t) {
+    var badges = visTags(l).map(function (t) {
       var txt = TAGS[t] || t;
       if (t === 'rebaja' && l.pd != null) txt = 'Rebaja ' + pct(l.pd);
       return '<span class="tag tag-' + t + '">' + esc(txt) + '</span>';
@@ -517,7 +525,7 @@
     if (!l._f) {
       var b = bin(l.s);
       l._f = { type: 'Feature', id: l._n, geometry: { type: 'Point', coordinates: [l.lng, l.lat] },
-        properties: { id: l.id, label: cop(l.p), bin: String(b), sv: l.s == null ? -1 : l.s } };
+        properties: { id: l.id, label: cop(l.p), n: 1, bin: String(b), sv: l.s == null ? -1 : l.s } };
     }
     return l._f;
   }
@@ -554,7 +562,7 @@
       map.addImage('pin-hl', hl.img, hl.opts);
 
       map.addSource('l', { type: 'geojson', data: fc([]), cluster: true, clusterRadius: 46, clusterMaxZoom: 14,
-        clusterProperties: { maxs: ['max', ['get', 'sv']] } });
+        clusterProperties: { maxs: ['max', ['get', 'sv']], cnt: ['+', ['get', 'n']] } });
       map.addSource('hl', { type: 'geojson', data: fc([]) });
       var stepColor = function (prop) {
         return ['case', ['<', ['get', prop], 0], RAMP.n, ['step', ['get', prop], RAMP[0], 40, RAMP[1], 55, RAMP[2], 70, RAMP[3], 85, RAMP[4]]];
@@ -564,7 +572,7 @@
         'circle-radius': ['step', ['get', 'point_count'], 15, 20, 19, 100, 24, 400, 30],
         'circle-stroke-width': 4, 'circle-stroke-color': stepColor('maxs') } });
       map.addLayer({ id: 'cluster-n', type: 'symbol', source: 'l', filter: ['has', 'point_count'], layout: {
-        'text-field': ['number-format', ['get', 'point_count'], { locale: 'es-CO' }], 'text-size': 12, 'text-font': ['DIN Pro Bold', 'Arial Unicode MS Bold'] },
+        'text-field': ['number-format', ['get', 'cnt'], { locale: 'es-CO' }], 'text-size': 12, 'text-font': ['DIN Pro Bold', 'Arial Unicode MS Bold'] },
         paint: { 'text-color': DARK.matches ? '#e4ebe8' : '#14201b' } });
       map.addLayer({ id: 'dots', type: 'circle', source: 'l', filter: ['!', ['has', 'point_count']], paint: {
         'circle-radius': 4, 'circle-color': stepColor('sv'), 'circle-stroke-width': 1, 'circle-stroke-color': DARK.matches ? '#0e1412' : '#fff' } });
@@ -583,7 +591,10 @@
       ['pins', 'dots'].forEach(function (layer) {
         map.on('mousemove', layer, function (e) { map.getCanvas().style.cursor = 'pointer'; setHot(e.features[0].properties.id, 'map'); });
         map.on('mouseleave', layer, function () { map.getCanvas().style.cursor = ''; setHot(null, 'map'); });
-        map.on('click', layer, function (e) { location.hash = encodeURIComponent(e.features[0].properties.id); });
+        map.on('click', layer, function (e) {
+          var p = e.features[0].properties, l = byId.get(p.id), st = l && stacks.get(skey(l));
+          if (st && st.length > 1) showStack(st, e.features[0].geometry.coordinates); else location.hash = encodeURIComponent(p.id);
+        });
       });
       map.on('click', 'hl', function (e) { location.hash = encodeURIComponent(e.features[0].properties.id); });
       map.on('mouseenter', 'clusters', function () { map.getCanvas().style.cursor = 'pointer'; });
@@ -591,7 +602,16 @@
       map.on('click', 'clusters', function (e) {
         var f = e.features[0];
         map.getSource('l').getClusterExpansionZoom(f.properties.cluster_id, function (err, z) {
-          if (!err) map.easeTo({ center: f.geometry.coordinates, zoom: z + 0.2, duration: REDUCED.matches ? 0 : 500 });
+          var go = function () { if (!err) map.easeTo({ center: f.geometry.coordinates, zoom: z + 0.2, duration: REDUCED.matches ? 0 : 500 }); };
+          if (!err && z >= 15) {  // quizá son ofertas en el mismo punto: no se separan al acercar
+            map.getSource('l').getClusterLeaves(f.properties.cluster_id, 40, 0, function (e2, leaves) {
+              if (e2 || !leaves.length) return go();
+              var l0 = byId.get(leaves[0].properties.id), k0 = l0 && skey(l0);
+              var same = leaves.every(function (x) { var q = byId.get(x.properties.id); return q && skey(q) === k0; });
+              var st = same && stacks.get(k0);
+              if (st && st.length > 1) showStack(st, f.geometry.coordinates); else go();
+            });
+          } else go();
         });
       });
       map.on('moveend', function () { if (state.area) updateVisible(); });
@@ -639,7 +659,7 @@
     var addAll = function (defs) { defs.forEach(function (d) { if (!map.getSource(d.id)) map.addSource(d.id, { type: 'geojson', data: d.data }); d.layers.forEach(function (ly) { ly.source = d.id; map.addLayer(ly, below); }); }); };
     if (k === 'heat') {
       layerLoaded[k] = Promise.resolve().then(function () {
-        var feats = all.filter(function (l) { return l.pm; }).map(function (l) {
+        var feats = all.filter(function (l) { return l.pm && l.pm < 3e7 && l._geo; }).map(function (l) {
           return { type: 'Feature', geometry: { type: 'Point', coordinates: [l.lng, l.lat] }, properties: { pm: l.pm / 1e6 } };
         });
         addAll([{ id: 'heat-src', data: fc(feats), layers: [{ id: 'heat', type: 'heatmap', maxzoom: 16, paint: {
@@ -694,7 +714,37 @@
     updateVisible();
   }
   function fc(feats) { return { type: 'FeatureCollection', features: feats }; }
-  function updateMapData() { if (mapReady) map.getSource('l').setData(fc(filtered.map(feature))); }
+  // Ofertas apiladas en una misma coordenada (ubicación aproximada = centro del barrio): se cuentan y se listan en un popup.
+  var stacks = new Map();
+  function skey(l) { return l.lat + ',' + l.lng; }
+  function updateMapData() {
+    if (!mapReady) return;
+    stacks = new Map();
+    var feats = [];
+    for (var i = 0; i < filtered.length; i++) {
+      var l = filtered[i]; if (!l._geo) continue;
+      var k = skey(l), a = stacks.get(k); if (a) a.push(l); else stacks.set(k, [l]);
+    }
+    for (var j = 0; j < filtered.length; j++) {
+      var m = filtered[j]; if (!m._geo) continue;
+      var f = feature(m), n = stacks.get(skey(m)).length;
+      var lab = n > 1 ? (stacks.get(skey(m))[0] === m ? cop(m.p) + ' +' + (n - 1) : null) : cop(m.p);
+      if (lab === null) continue;  // en una pila solo se dibuja la mejor oferta
+      f.properties.label = lab; f.properties.n = n;
+      feats.push(f);
+    }
+    map.getSource('l').setData(fc(feats));
+  }
+  var stackPopup = null;
+  function showStack(list, lngLat) {
+    if (stackPopup) stackPopup.remove();
+    var top = list.slice(0, 40);
+    var html = '<div class="stack-pop"><b>' + NF.format(list.length) + ' ofertas en este punto</b><small>' + (list[0].gp === 'b' ? 'Ubicación aproximada: centro del barrio ' + esc(list[0].br) : 'Misma ubicación exacta') + '</small><ul>' +
+      top.map(function (x) {
+        return '<li><a href="#' + encodeURIComponent(x.id) + '"><span class="num">' + cop(x.p) + '</span><span>' + (x.a ? NF.format(x.a) + ' m²' : 'sin área') + (x.b != null ? ' · ' + x.b + ' hab' : '') + '</span>' + scoreBadge(x.s) + '</a></li>';
+      }).join('') + '</ul>' + (list.length > top.length ? '<small>y ' + NF.format(list.length - top.length) + ' más: usa los filtros para acotar.</small>' : '') + '</div>';
+    stackPopup = new mapboxgl.Popup({ maxWidth: '300px', closeButton: true }).setLngLat(lngLat).setHTML(html).addTo(map);
+  }
   function setHl(id) {
     if (!mapReady) return;
     var l = id && byId.get(id);
@@ -710,7 +760,8 @@
   function fitTo(list) {
     if (!mapReady || !list.length) return;
     var b = new mapboxgl.LngLatBounds();
-    list.forEach(function (l) { b.extend([l.lng, l.lat]); });
+    list.forEach(function (l) { if (l._geo) b.extend([l.lng, l.lat]); });
+    if (b.isEmpty()) return;
     map.fitBounds(b, { padding: 40, maxZoom: 15, duration: REDUCED.matches ? 0 : 600 });
   }
 
@@ -777,6 +828,8 @@
   var pendingFit = false;
   function routeHash() {
     var id = decodeURIComponent(location.hash.slice(1));
+    var cmm = /^comuna=(\d+)$/.exec(id);
+    if (cmm) { state.f.zona = { cm: [+cmm[1]], br: [] }; history.replaceState(null, '', location.pathname + location.search); apply(); if (mapReady) fitTo(filtered); else pendingFit = true; return; }
     var bm = /^barrio=(.+)$/.exec(id);
     if (bm) {  // enlace desde Zonas: #barrio=<código> preconfigura el filtro de zona
       state.f.zona = { cm: [], br: [bm[1]] };
@@ -793,15 +846,15 @@
     var photos = d ? d.photos : (l.img ? [l.img] : []);
     var gallery = photos.length
       ? '<div class="gallery" tabindex="0" aria-label="Fotos (' + photos.length + ')">' + photos.map(function (u, i) {
-        return '<img src="' + esc(u) + '" alt="Foto ' + (i + 1) + ' de ' + photos.length + '" loading="' + (i < 2 ? 'eager' : 'lazy') + '" decoding="async" onerror="this.remove()">';
+        return '<img src="' + esc(u) + '" alt="Foto ' + (i + 1) + ' de ' + photos.length + '" loading="' + (i < 2 ? 'eager' : 'lazy') + '" decoding="async" referrerpolicy="no-referrer" onerror="this.remove()">';
       }).join('') + '</div><p class="gallery-count">' + photos.length + ' ' + (photos.length === 1 ? 'foto' : 'fotos') + (photos.length > 1 ? ' · desliza para ver más' : '') + '</p>'
       : '<div class="gallery"><div class="no-photo">El anuncio no tiene fotos</div></div>';
     var title = d ? d.title : (l.t === 'c' ? 'Casa' : 'Apartamento') + ' en venta';
-    var sub = ['<span class="br">' + esc(l.br || 'Barrio sin dato') + '</span>', 'Comuna ' + esc(l.cm), 'Estrato ' + esc(l.e),
+    var sub = ['<span class="br">' + esc(l.br || 'Barrio sin dato') + '</span>', l.cm ? 'Comuna ' + esc(l.cm) : 'Fuera de las comunas', l.e ? 'Estrato ' + esc(l.e) : null,
       l.a ? NF.format(l.a) + ' m²' : 'sin área', l.b != null ? l.b + ' hab' : null, l.ba != null ? l.ba + (l.ba === 1 ? ' baño' : ' baños') : null,
       (l.pk || 0) + ' parq', l.age != null ? l.age + ' años' : null, d && d.floor ? 'piso ' + d.floor : null,
       d && d.admin ? 'admin ' + copFull(d.admin) : null].filter(Boolean).map(function (x) { return '<span>' + x + '</span>'; }).join('');
-    var tags = l.tags.map(function (t) { return '<span class="tag tag-' + t + '">' + esc(t === 'rebaja' && l.pd != null ? 'Rebaja ' + pct(l.pd) : TAGS[t] || t) + '</span>'; }).join('');
+    var tags = visTags(l).map(function (t) { return '<span class="tag tag-' + t + '">' + esc(t === 'rebaja' && l.pd != null ? 'Rebaja ' + pct(l.pd) : TAGS[t] || t) + '</span>'; }).join('');
     var links = d && d.urls && d.urls.length ? '<div class="d-links">' + d.urls.map(function (u) {
       var name = /fincaraiz/.test(u) ? 'Finca Raíz' : /metrocuadrado/.test(u) ? 'Metrocuadrado' : (u.split('/')[2] || 'portal');
       return '<a class="btn" href="' + esc(u) + '" target="_blank" rel="noopener noreferrer">Ver en ' + esc(name) + ' ↗</a>';
@@ -810,7 +863,7 @@
       '<div class="d-price-row"><span class="d-price num">' + cop(l.p) + '</span>' + scoreBadge(l.s) + '</div>' +
       '<div class="d-sub"><span class="num">' + (l.pm ? copM1(l.pm) + '/m²' : 'sin $/m²') + '</span>' +
       (l.d != null ? '<span class="' + (l.d > 0 ? 'd-good' : 'd-flat') + '">' + pct(-l.d, true) + ' vs zona</span>' : '') +
-      (l.up != null && l.up > 0 ? '<span class="d-good">upside ' + pct(l.up, true) + '</span>' : '') + '</div>' +
+      (l.up != null && l.up > 0 ? '<span class="d-good">upside ' + upTxt(l.up) + '</span>' : '') + '</div>' +
       '<div class="d-sub">' + sub + '</div>' +
       (tags ? '<div class="badges" style="margin-top:8px">' + tags + '</div>' : '') + links + '</div>';
   }
@@ -830,7 +883,7 @@
       amenTop ? 'Cerca de ' + amenTop + '.' : 'Pocas amenidades registradas cerca.',
       z.dom != null ? 'En la zona se vende en unos ' + z.dom + ' días (mediana).' : 'Liquidez sin datos aún.'
     ];
-    var rs = COMP.map(function (k, i) { return { i: i, pts: k.w * c[i], t: texts[i] }; }).sort(function (a, b) { return b.pts - a.pts; }).slice(0, 3);
+    var rs = l.s == null ? [] : COMP.map(function (k, i) { return { i: i, pts: k.w * c[i], t: texts[i] }; }).sort(function (a, b) { return b.pts - a.pts; }).slice(0, 3);
     out += '<section class="sec"><h2>Por qué está aquí</h2><ul class="reasons">' + rs.map(function (r) {
       return '<li><span class="pts plus">+' + NF1.format(r.pts) + '</span><span><b>' + COMP[r.i].k + '.</b> ' + esc(r.t) + '</span></li>';
     }).join('') + l.pen.map(function (p) {
@@ -1000,6 +1053,14 @@
     l.tags.forEach(function (x) { t[x] = true; });
     l._tags = t; l._npen = nPen(l);
     if (l.br == null) l.br = '';
+    // Sanear datos sucios de los portales.
+    if (l.cm == null) l.cm = 0;
+    if (l.b != null && l.b < 0) l.b = null;
+    if (l.ba != null && l.ba < 0) l.ba = null;
+    if (l.pk != null && l.pk < 0) l.pk = 0;
+    if (l.a != null && l.a > 5000) l.a = null;      // áreas absurdas (lotes mal digitados)
+    if (l.s == null && !l.conf) { l.d = null; l.up = null; }  // sin cálculo: no mostrar 0 % engañoso
+    l._geo = l.lat > 2.5 && l.lat < 4.8 && l.lng > -77.5 && l.lng < -75.5;
     return l;
   }
   function boot() {
@@ -1010,7 +1071,7 @@
       fetch('data/zones.json').then(function (r) { return r.ok ? r.json() : {}; }).catch(function () { return {}; }),
       fetch('data/meta.json').then(function (r) { return r.ok ? r.json() : {}; }).catch(function () { return {}; })
     ]).then(function (res) {
-      all = (res[0].listings || []).filter(function (l) { return l && l.lat != null && l.lng != null; }).map(prep);
+      all = (res[0].listings || []).filter(function (l) { return l && l.id; }).map(prep);
       all.forEach(function (l) { byId.set(l.id, l); });
       zones = res[1] || {}; meta = res[2] || {};
       var gen = meta.generated_at || res[0].generated_at;
@@ -1023,13 +1084,15 @@
       all.forEach(function (l) {
         var c = cm[l.cm] = cm[l.cm] || { cm: l.cm, n: 0, br: {} };
         c.n++;
+        if (!l.cm) return;
         var b = c.br[l.brc] = c.br[l.brc] || { code: l.brc, name: l.br || (zones[l.brc] && zones[l.brc].name) || l.brc, n: 0 };
         b.n++;
       });
       comunas = Object.keys(cm).map(function (k) {
         var c = cm[k]; c.barrios = Object.keys(c.br).map(function (x) { return c.br[x]; }).sort(function (a, b) { return a.name.localeCompare(b.name, 'es'); });
         return c;
-      }).sort(function (a, b) { return a.cm - b.cm; });
+      }).sort(function (a, b) { return (a.cm || 99) - (b.cm || 99); });
+      nuevaShare = all.filter(function (l) { return l._tags.nueva; }).length / (all.length || 1);
       apply();
       initMap();
       if (location.hash.length > 1) routeHash();
