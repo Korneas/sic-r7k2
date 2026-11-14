@@ -200,7 +200,7 @@ Mitigaciones, en orden:
 **C2. Potencial de reventa (25%)**
 
 *Sin costos de remodelación (decisión del 2026-11-14): se mide el techo de precio de la zona, no la ganancia neta.*
-- `ARV_m2` = percentil 75 del precio/m² de los comparables "en buen estado": antigüedad ≤ 15 años o palabras como "remodelado" o "para estrenar". Si hay menos de 5, se usa P75 de todos.
+- `ARV_m2` = percentil 75 del precio/m² de los comparables "en buen estado": antigüedad ≤ 15 años o palabras como "remodelado" o "para estrenar". Si hay menos de 5, se usa P75 de todos. Para un usado no cuentan los comparables de obra nueva (≤ 8 años), y `ARV_m2 ≤ 1,35 × expected_m2` (P85 de esa relación en Cali). El upside se guarda con tope de 80% (T13).
 - `upside = ARV_m2 / price_m2 − 1`: cuánto podría subir el m² si queda como los mejores de la zona. Se muestra en pesos (`(ARV_m2 − price_m2) × area`) y en %.
 - Si el texto o la antigüedad indican "para remodelar", "para actualizar", "original" o más de 20 años, aparece la etiqueta 🔨 "para remodelar". Es informativa: no resta y ayuda a encontrar los candidatos del flip.
 - También se muestra `max_offer_70 = ARV × 0,70` como referencia de la regla del 70%, comparada con el precio pedido.
@@ -422,6 +422,7 @@ Alertas, multiusuario o login, sincronización de favoritos, otras ciudades, arr
 | Fecha | Fase | Nota |
 |---|---|---|
 | 2026-11-14 | Plan | Volumen medido: FR ~10.850 y M2 ~9.980 (estratos 2 a 6). WFS de IDESC verificado. datos.cali.gov.co caído |
+| 2026-11-14 | T13 ✅ | Revisión del ranking con datos reales (`docs/review-2026-11-14.md`, top 40 y 20 al azar entre P50 y P90). Errores en el top: casas de uso mixto o multifamiliares (13 de 40), upside inflado por torres nuevas o casas de lujo en el P75 (31 de 40 > 100%), área = lote, edad mal y un barrio sin alias. Arreglos: etiqueta `mixto` y −10 (`mixed_use_keywords`); ARV sin obra nueva para usados, con tope de 1,35 × expected (P85 de la relación) y upside con tope de 0,8 (UI "≥ +80%"); usados > 8 años sin comparables nuevos; edad desde el año de construcción del texto; área construida desde el texto o NULL `area_lote`; `other_cities` → NULL `fuera_de_cali`. Ubicación: (0,0) y "Na" de M2 cuentan como vacíos, barrio desde el título, `geo.aliases` y `geo.centroids` (77 barrios de portal sin polígono, mediana de las exactas; `python -m scraper.geo --centroids`). sin_ubicacion 1.707 → 253; con puntaje 84,9% → 94,8% |
 | 2026-11-14 | T12 ✅ | Actions: full a las 00:00 COT, incremental a las 06, 12 y 18, y `workflow_dispatch` con modo `pipeline`. La DB (sin tablas derivadas, gz ~15 MB) y `web-data.tar.gz` van como assets del release `db`. Cada corrida commitea solo `data/last_run.json`, lo que dispara Vercel; el build baja el tarball. Primera corrida de pipeline en Actions OK (dedupe → export en 35 s). Sitio en https://sic-r7k2.vercel.app. Token desde la env `MAPBOX_PK` (la `MAPBOX_TOKEN` quedó mal cargada y borrarla requiere aprobación humana). **Manual pendiente**: restringir el token por URL en el dashboard de Mapbox |
 | 2026-11-14 | T6 fix | Con datos reales el union-find encadenaba (grupos de hasta 684). Se pasó a complete-linkage best-first, con máximo 6 por grupo y 2 activas por portal; las coincidencias no exactas exigen ±2% y el barrio "Na" cuenta como vacío. Resultado: 36% agrupado (2.123 pares FR+M2, grupo máximo de 4). Revisión manual de 10 grupos entre portales: todos son el mismo inmueble |
 | 2026-11-14 | T8 ✅ | Primera corrida real: FR 10.519 y M2 9.722 (FR 75 min, M2 18 min). Puntaje: 85% de los grupos de venta activos tienen puntaje, en 4 s; 4.340 ranqueables. Filtro de outliers en dos pasadas (z_MAD > 4). Máximo 2 comparables por punto de ~15 m para que un edificio o el centroide de un barrio no domine; los inmuebles de más de 15 años no usan comparables de 8 años o menos. Pendientes: el upside sale inflado cuando la antigüedad falta o está mal (la v2 hedónica lo corrige); 1.210 grupos sin ubicación. La DB local pesa 223 MB con las tablas derivadas; en el release se guarda sin ellas y comprimida (15 MB). Los datos web (73 MB) también van al release y Vercel los descarga al compilar |
@@ -465,7 +466,7 @@ Asignación de modelo: **opus** para tareas de diseño o algoritmos (puntaje, de
 | T10 | Web: Explorar (lista y mapa Mapbox), filtros, detalle, favoritos; referencias de Mobbin | T9 (contrato de datos; puede arrancar con un fixture) | opus | ✅ |
 | T11 | Web: Metodología y Zonas (coropleta) | T10 | sonnet | ✅ |
 | T12 | GitHub Actions (cron full + incremental, probe) y deploy en Vercel; restringir el token de Mapbox | T4, T9 | sonnet | ✅ |
-| T13 | Primera corrida full real, revisión del top 20, ajustes | T8, T12 | opus | ⬜ |
+| T13 | Primera corrida full real, revisión del top 20, ajustes | T8, T12 | opus | ✅ |
 | T14 | QA de la UI (`break-ui`, móvil 390 px, consola limpia) y pulido | T10, T11 | sonnet | ⬜ |
 | T15 | v2: modelo hedónico con validación espacial; pesos de amenidades calibrados | T13 | opus | ⬜ |
 | T16 | Hash de fotos en el dedupe y detección de republicadas | T13 | sonnet | ⬜ |

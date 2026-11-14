@@ -58,9 +58,9 @@ Lo dueña `scraper/db.py`. `id = "fr-<source_id>"` \| `"m2-<source_id>"`.
     "s": 78.4,                                 // puntaje 0-100; null = no ranqueable
     "c": [82, 70, 50, 64, 50],                 // C1..C5, de 0 a 100
     "d": 0.18,                                 // descuento vs comparables (0.18 = 18 % debajo)
-    "up": 0.25,                                // upside al P75 en buen estado
+    "up": 0.25,                                // upside al P75 en buen estado, sin obra nueva si es usado; tope 0.8 (UI: "≥ +80%")
     "conf": 0.9,
-    "tags": ["nueva", "rebaja", "remodelar", "legal", "sospechoso"],
+    "tags": ["nueva", "rebaja", "remodelar", "legal", "sospechoso", "mixto"],  // mixto: uso mixto/multifamiliar (T13)
     "pen": [{"k": "inund", "pts": 12, "why": "Zona inundable: río Cauca"}],
     "img": "https://…jpg",
     "fs": "2026-11-14",                        // primera vez visto

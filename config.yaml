@@ -20,6 +20,13 @@ exclude_keywords:   # oficinas/locales/proyectos anunciados como casa o apto (si
   - preventa
 
 legal_keywords: [derechos, proindiviso, sucesion, sin escritura, posesion, remate, embargo, cesion de derechos]
+# T13: casa comercial / multifamiliar / rentista (26% del top 100 vs 5% del total): etiqueta "mixto" y resta score.penalties.mixto
+mixed_use_keywords: [uso mixto, casa comercial, muy comercial, uso comercial, para oficinas, uso de oficinas, apta para oficina,
+                     dos locales, 2 locales, tres locales, multifamiliar, bifamiliar, pisos independientes, niveles independientes,
+                     apartamentos independientes, inquilinato, rentista, renta mensual, independizar, comercial y residencial,
+                     residencial y comercial, casa lote]
+# T13: el título dice otro municipio ("…, Yumbo"): no se puntúa
+other_cities: [yumbo, jamundi, candelaria, palmira, puerto tejada, dagua, la cumbre, vijes, florida, pradera]
 remodel_keywords: [para remodelar, para actualizar, remodelar, original, requiere mantenimiento, para reformar, necesita arreglos]
 renovated_keywords: [remodelado, remodelada, para estrenar, recien remodelado, totalmente remodelado]
 
@@ -39,12 +46,112 @@ score:
   # C4 (PLAN §6.2): peso por categoría; la profundidad y las reglas de distancia están en scraper/geo.py
   amenity_weights: { mio_station: 15, mio_stop: 5, mall: 15, supermarket: 12, park: 13, hospital: 10, school: 10, restaurant: 8, bank_pharmacy: 4, fitness: 3 }
   # PLAN §6.3: puntos que resta cada riesgo (inund_baja = amenaza baja mitigable; ruido_db = umbral en dB)
-  penalties: { inund_nomit: 30, inund: 12, inund_baja: 4, ladera: 15, homic_p90: 15, homic_p75: 7, precario: 10, ruido: 5, ruido_db: 65, legal: 10 }
+  penalties: { inund_nomit: 30, inund: 12, inund_baja: 4, ladera: 15, homic_p90: 15, homic_p75: 7, precario: 10, ruido: 5, ruido_db: 65, legal: 10, mixto: 10 }
   # T8: cordura del precio/m² (COP; rent = arriendo mensual/m²), atípicos |z_MAD| (log pm, escala con piso) y k mínimo
   sanity: { pm_min: 800000, pm_max: 40000000, rent_pm_min: 4000, rent_pm_max: 200000, z_mad: 4, mad_floor: 0.2, k_floor: 3 }
   # C3/C5: barrio si n_sale ≥ min_n, si no comuna; tendencia con ≥ 4 snapshots en ≥ 60 días; liquidez tras 30 días
   zone: { min_n: 15, trend_min_snapshots: 4, trend_min_days: 60, trend_window_days: 365, liquidity_min_days: 30 }
+  # T13: ARV = P75 sin obra nueva (≤ new_build_age) salvo sujeto nuevo, con tope expected_m2 × (1 + cap_vs_expected);
+  # el upside se guarda con tope upside_cap (la UI muestra "≥ +80%") y se marca upside_capped
+  arv: { cap_vs_expected: 0.35, upside_cap: 0.8 }
+  area_lote_min: 600      # casa cuya área = número de "lote" del texto, sin área construida y ≥ esto: score NULL (area_lote)
   good_age_years: 15      # C2: "buen estado" para el ARV
   remodel_age_years: 20   # etiqueta remodelar
   conf_k: 12              # confianza = min(1, k/conf_k)·…
   new_hours: 48           # etiqueta nueva
+
+# T13: ubicación por nombre cuando el portal no trae coordenada usable (M2 manda (0,0) con barrio "Na").
+# aliases: nombre del portal -> nombre del barrio IDESC (se normalizan: sin tildes, prefijos ni artículos).
+# centroids: barrios/sectores de portal SIN polígono IDESC (expansión sur, Pance, sectores de ladera) -> mediana de
+#   las coordenadas exactas de las ofertas con ese nombre (≥ 5 ofertas, dispersión ≤ 1 km).
+#   Regenerar con: .venv/bin/python -m scraper.geo --centroids
+geo:
+  aliases:
+    valle de lili: lili
+    valle lili: lili
+    12 de octubre: doce de octubre
+    1 de mayo: primero de mayo
+    chiminangos i: chiminangos primera etapa
+    chiminangos ii: chiminangos segunda etapa
+    alfonso lopez i etapa: alfonso lopez pumarejo 1a etapa
+    ingenio ii: el ingenio
+    ingenio iii: el ingenio
+    santa monica residential: santa monica
+  centroids:   # generado 2026-11-14 con --centroids (n = ofertas exactas, dispersión = mediana de la distancia)
+    acopi: [3.49079, -76.50542]  # n=7, dispersión 195 m
+    aguaclara: [3.34557, -76.5134]  # n=8, dispersión 28 m
+    aguas calientes: [3.30925, -76.53478]  # n=5, dispersión 11 m
+    alameda central: [3.37077, -76.51081]  # n=6, dispersión 0 m
+    altos de ciudad jardin: [3.35724, -76.54324]  # n=19, dispersión 660 m
+    altos de guadalupe: [3.40858, -76.55693]  # n=14, dispersión 323 m
+    ambar: [3.3682, -76.50756]  # n=6, dispersión 44 m
+    area libre parque del amor: [3.49066, -76.52176]  # n=24, dispersión 136 m
+    arroyohondo: [3.49529, -76.52859]  # n=5, dispersión 0 m
+    bajos ciudad cordoba: [3.39625, -76.50829]  # n=6, dispersión 217 m
+    base planta y talleres: [3.4519, -76.49143]  # n=9, dispersión 11 m
+    bella suiza: [3.40908, -76.56162]  # n=14, dispersión 440 m
+    bochalema: [3.35828, -76.51726]  # n=544, dispersión 540 m
+    bochalema sur: [3.35682, -76.51746]  # n=18, dispersión 451 m
+    brisas del guabito: [3.46888, -76.48886]  # n=5, dispersión 310 m
+    buitrera: [3.36527, -76.5623]  # n=34, dispersión 542 m
+    cachipay: [3.35344, -76.50265]  # n=49, dispersión 367 m
+    cali el penon: [3.44929, -76.54117]  # n=6, dispersión 257 m
+    calicanto: [3.37273, -76.51954]  # n=8, dispersión 89 m
+    calvario: [3.44579, -76.52888]  # n=8, dispersión 28 m
+    canasgordas: [3.35499, -76.53007]  # n=15, dispersión 472 m
+    centro: [3.44778, -76.53302]  # n=10, dispersión 338 m
+    cerro cristales: [3.42991, -76.55341]  # n=11, dispersión 9 m
+    cerros la buitrera: [3.36059, -76.54518]  # n=30, dispersión 432 m
+    cian: [3.37034, -76.50847]  # n=20, dispersión 0 m
+    ciudad bochalema: [3.35672, -76.51726]  # n=17, dispersión 484 m
+    ciudad melendez: [3.37077, -76.5084]  # n=268, dispersión 439 m
+    ciudad melendez sur: [3.37075, -76.50606]  # n=8, dispersión 106 m
+    ciudad pacifica: [3.34555, -76.51736]  # n=215, dispersión 460 m
+    ciudad real: [3.37454, -76.5152]  # n=42, dispersión 772 m
+    coaba: [3.35944, -76.51661]  # n=7, dispersión 0 m
+    farallones de la bocha: [3.35858, -76.51789]  # n=10, dispersión 0 m
+    hacienda el castillo: [3.27581, -76.51498]  # n=7, dispersión 0 m
+    hacienda kachipay: [3.35959, -76.5194]  # n=48, dispersión 0 m
+    iguache: [3.37225, -76.51609]  # n=7, dispersión 0 m
+    indigo: [3.3677, -76.50885]  # n=5, dispersión 0 m
+    kachipay: [3.3541, -76.50256]  # n=76, dispersión 385 m
+    luisa bella suiza: [3.40816, -76.56335]  # n=27, dispersión 541 m
+    magenta: [3.37392, -76.50609]  # n=6, dispersión 45 m
+    mameyal: [3.44239, -76.55508]  # n=5, dispersión 275 m
+    mandarinos: [3.37909, -76.50873]  # n=8, dispersión 0 m
+    marfil: [3.37023, -76.50508]  # n=8, dispersión 7 m
+    maria pance: [3.33462, -76.53624]  # n=6, dispersión 682 m
+    mirador de la rivera: [3.34395, -76.54665]  # n=14, dispersión 74 m
+    morelia: [3.42993, -76.5544]  # n=8, dispersión 0 m
+    moretti: [3.36534, -76.51579]  # n=5, dispersión 0 m
+    multicentro: [3.3785, -76.53853]  # n=34, dispersión 201 m
+    nueva floresta del ict: [3.43916, -76.49824]  # n=15, dispersión 508 m
+    pacara: [3.48371, -76.51151]  # n=11, dispersión 278 m
+    pance la viga: [3.31478, -76.53433]  # n=15, dispersión 589 m
+    parque vivero: [3.36085, -76.50374]  # n=7, dispersión 186 m
+    parques de la bocha: [3.35468, -76.51856]  # n=13, dispersión 0 m
+    patios de la flora: [3.48945, -76.52347]  # n=5, dispersión 16 m
+    piedra grande: [3.35959, -76.51814]  # n=210, dispersión 472 m
+    punta del este: [3.35555, -76.521]  # n=11, dispersión 30 m
+    quintas de salomia: [3.46875, -76.48292]  # n=5, dispersión 115 m
+    reforma: [3.39576, -76.57408]  # n=15, dispersión 483 m
+    riverita: [3.3536, -76.5578]  # n=10, dispersión 646 m
+    sameco: [3.49076, -76.50608]  # n=5, dispersión 498 m
+    seminario: [3.40859, -76.55375]  # n=28, dispersión 238 m
+    senderos de la pradera: [3.37125, -76.5093]  # n=5, dispersión 0 m
+    senderos del lili: [3.37322, -76.52074]  # n=6, dispersión 413 m
+    solares de pance: [3.31729, -76.54099]  # n=6, dispersión 2 m
+    tejares de san fernando: [3.43845, -76.54416]  # n=14, dispersión 252 m
+    templete: [3.42618, -76.53881]  # n=5, dispersión 157 m
+    tierra linda: [3.34295, -76.50875]  # n=13, dispersión 131 m
+    transito municipal: [3.46797, -76.48956]  # n=26, dispersión 332 m
+    treboles vivero parque residencial: [3.35968, -76.51041]  # n=11, dispersión 0 m
+    turquesa: [3.36842, -76.50635]  # n=11, dispersión 0 m
+    vegas de comfandi: [3.38125, -76.50941]  # n=102, dispersión 221 m
+    viga: [3.31197, -76.53475]  # n=15, dispersión 734 m
+    villa fatima: [3.34622, -76.50815]  # n=54, dispersión 895 m
+    villas de veracruz: [3.47577, -76.49979]  # n=12, dispersión 172 m
+    vivero: [3.36146, -76.50793]  # n=12, dispersión 393 m
+    vivero parque residencial: [3.36029, -76.50524]  # n=19, dispersión 359 m
+    zafiro: [3.37008, -76.50517]  # n=24, dispersión 25 m
+    tierralinda: [3.34295, -76.50875]   # = tierra linda

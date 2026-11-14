@@ -145,21 +145,42 @@ def count_within(P, Q, r, chunk=2048):
 
 
 # ---------------------------------------------------------------- nombres de barrio
-PREFIX = re.compile(r"^(?:urbanizacion|urb|barrio|br|bo|conjunto residencial|conjunto|conj|unidad residencial|"
+# nombres de portal que no dicen nada del lugar ("Na" = no aplica en M2): se tratan como vacíos
+GENERIC = {"na", "nn", "n n", "no aplica", "sin informacion", "sur", "norte", "oeste", "este", "zona norte",
+           "zona sur", "zona oeste", "cali"}
+COMUNA_SUFFIX = re.compile(r"\s*\bcomuna\s*\d+$")
+TITLE_HOOD = re.compile(r"\ben\s+(?:venta|arriendo)\s*(?:,|\ben\b)\s*(.+)$", re.I)
+BBOX = (3.20, 3.60, -76.75, -76.40)  # lat_min, lat_max, lng_min, lng_max: fuera de esto la coordenada no sirve (0,0)
+PREFIX = re.compile(r"^(?:urbanizacion|urb|ub|barrio|br|bo|conjunto residencial|conjunto|conj|cr|unidad residencial|"
                     r"unidad|ur|residencial|condominio|edificio|sector|parcelacion|parcelaciones)\b\s*")
-ALIASES = {"valle del lili": "lili"}  # nombres de portal -> nombre IDESC (normalizados)
+ALIASES = {"valle del lili": "lili"}  # nombres de portal -> nombre IDESC (normalizados); más en config geo.aliases
+CARDINAL = re.compile(r"^(?:cali|norte|sur|oeste)\s+|\s+(?:norte|sur|oeste|alta|residencial|residential)$")
+
+
+def variants(k):
+    """La clave y, si cambia, la clave sin punto cardinal: "santa monica residencial" -> "santa monica"."""
+    v = CARDINAL.sub("", k).strip()
+    return [k, v] if v and v != k else [k]
 ARTICLE = re.compile(r"^(?:el|la|los|las)\s+")
 
 
 def name_key(s):
     s = re.sub(r"[^a-z0-9 ]", " ", db.norm(s))
     s = re.sub(r"\b(?:cali|valle del cauca|valle|colombia)$", "", " ".join(s.split())).strip()
+    s = COMUNA_SUFFIX.sub("", s).strip()  # "Ciudad Melendez/ Comuna 18" -> "ciudad melendez"
     for _ in range(3):
         s2 = ARTICLE.sub("", PREFIX.sub("", s))
         if s2 == s:
             break
         s = s2
-    return " ".join(s.split())
+    s = " ".join(s.split())
+    return "" if s in GENERIC else s
+
+
+def title_hood(title):
+    """Barrio del título: "Apartamento en Venta, Ciudad Pacifica, Cali" / "Casa en venta en Bochalema, Cali"."""
+    m = TITLE_HOOD.search(title or "")
+    return m.group(1).split(",")[0].strip() if m else None
 
 
 class BarrioIndex:
@@ -174,22 +195,32 @@ class BarrioIndex:
                 self.keys.setdefault(name_key(alias), i)
         self.klist = list(self.keys)
         self._memo = {}
+        self.aliases = dict(ALIASES)
+
+    def set_aliases(self, extra):
+        """Alias de config (geo.aliases): nombre de portal -> nombre IDESC; ambos se normalizan con name_key."""
+        al = {**ALIASES, **{name_key(k): name_key(v) for k, v in (extra or {}).items()}}
+        if al != self.aliases:
+            self.aliases, self._memo = al, {}
 
     def match(self, name):
         """Índice del barrio cuyo nombre coincide con `name` (o None). "A - B" o "A, B" prueba cada parte."""
         i = self._match(name)
-        if i is None and re.search(r"\s-\s|,|/", name or ""):
-            i = next((j for part in re.split(r"\s-\s|,|/", name) if (j := self._match(part)) is not None), None)
+        if i is None and re.search(r"\s-\s|,|/|\\", name or ""):
+            i = next((j for part in re.split(r"\s-\s|,|/|\\", name) if (j := self._match(part)) is not None), None)
         return i
 
     def _match(self, name):
         k = name_key(name)
-        k = ALIASES.get(k, k)
+        k = self.aliases.get(k, k)
         if not k:
             return None
         if k in self._memo:
             return self._memo[k]
-        i = self.keys.get(k)
+        i = next((self.keys[v] for v in variants(k) if v in self.keys), None)
+        if i is None and len(variants(k)) > 1:
+            v = variants(k)[1]
+            i = self.keys.get(self.aliases.get(v, v))
         if i is None:
             toks = set(k.split())
             subs = [c for c in self.klist if toks <= set(c.split()) and len(k) >= 4]  # "san fernando" ⊂ "san fernando viejo"
@@ -521,7 +552,8 @@ def run(conn, cfg=None):
     lat = np.array([r["lat"] if r["lat"] is not None else np.nan for r in rows], float)
     lng = np.array([r["lng"] if r["lng"] is not None else np.nan for r in rows], float)
     xy = to_m(lat, lng)
-    has = ~np.isnan(xy).any(1)
+    with np.errstate(invalid="ignore"):  # (0, 0) u otra coordenada fuera de Cali = sin coordenada
+        has = ~np.isnan(xy).any(1) & (lat >= BBOX[0]) & (lat <= BBOX[1]) & (lng >= BBOX[2]) & (lng <= BBOX[3])
     exact = np.array([r["geo_precision"] == "exact" for r in rows]) & has
 
     # barrio por polígono (con tolerancia de 50 m para puntos en el borde o en la vía)
@@ -536,9 +568,35 @@ def run(conn, cfg=None):
     downgraded = 0
     old_notes = {k: json.loads(v) for k, v in conn.execute(
         "SELECT listing_id, geo_note FROM listing_geo WHERE geo_note LIKE '%\"orig\"%'")}
+    G = cfg.get("geo") or {}
+    bidx.set_aliases(G.get("aliases"))
+    cent = {name_key(k): v for k, v in (G.get("centroids") or {}).items()}
     portal_idx = [bidx.match(r["neighborhood_portal"]) if r["neighborhood_portal"] else None for r in rows]
+    fallback = 0
+
+    def locate(r):
+        """Respaldo sin coordenada usable ni barrio IDESC del portal: centroide de config del nombre del portal,
+        luego barrio IDESC o centroide del nombre que trae el título. -> (idx barrio | None, xy | None, nota)."""
+        tn = title_hood(r["title"])
+        for src, name in (("portal", r["neighborhood_portal"]), ("titulo", tn)):
+            k = name_key(name or "")
+            if not k:
+                continue
+            if src == "titulo":
+                j = bidx.match(name)
+                if j is not None:
+                    return j, rep_xy(j), {"src": "titulo", "match": B.props[j]["barnombre"]}
+            k = next((v for v in variants(k) if v in cent), None)
+            if k:
+                cxy = to_m([cent[k][0]], [cent[k][1]])[0]
+                return None, cxy, {"src": "centroide", "match": name, "why": (
+                    f"Barrio del portal sin polígono IDESC ({name}): mediana de las ofertas con coordenada exacta")}
+        return None, None, None
+
     for i, r in enumerate(rows):
         pi = portal_idx[i]
+        if precision[i] == "exact" and not exact[i]:
+            precision[i] = "neighborhood"  # "exacta" en (0, 0) o fuera de Cali
         if exact[i]:
             eff[i], barrio[i] = xy[i], bin_[i]
             if pi is not None and bin_[i] >= 0 and pi != bin_[i]:
@@ -557,7 +615,16 @@ def run(conn, cfg=None):
             notes[i] = prev if prev and prev.get("orig") == [r["lat"], r["lng"]] else \
                 {"src": "barrio", "match": B.props[pi]["barnombre"]}
         else:
-            notes[i] = {"why": f"Barrio del portal sin coincidencia en IDESC: {r['neighborhood_portal']!r}"}
+            j, cxy, note = locate(r)
+            if cxy is None:
+                notes[i] = {"why": f"Barrio del portal sin coincidencia en IDESC: {r['neighborhood_portal']!r}"}
+                continue
+            fallback += 1
+            eff[i], notes[i] = cxy, note
+            if j is None:  # el barrio IDESC (si lo hay) es el del polígono donde cae el centroide
+                _, bj = B.nearest(shapely.points(cxy[None, :]), 50)
+                j = bj[0]
+            barrio[i] = j
     ok = ~np.isnan(eff).any(1)
 
     # cálculos por ubicación única
@@ -626,13 +693,41 @@ def run(conn, cfg=None):
                      [(precision[i], r["id"]) for i, r in enumerate(rows) if precision[i] != r["geo_precision"]])
     conn.commit()
     stats = dict(n=n, located=int(ok.sum()), barrio=int((barrio >= 0).sum()),
-                 stratum=sum(1 for o in out if o[4] is not None), downgraded=downgraded,
+                 stratum=sum(1 for o in out if o[4] is not None), downgraded=downgraded, fallback=fallback,
                  homic_p75=float(p75), homic_p90=float(p90), seconds=round(time.time() - t0, 1))
     print("[geo]", json.dumps(stats))
     return stats
 
 
+def suggest_centroids(conn, cfg=None, min_n=5, max_spread_m=1000):
+    """Tabla geo.centroids para config.yaml: barrios de portal sin polígono IDESC (expansión sur, Pance, sectores)
+    -> mediana de las coordenadas exactas de las ofertas con ese nombre (en el portal o en el título). Solo nombres
+    con ≥ min_n ofertas y dispersión (mediana de la distancia a la mediana) ≤ max_spread_m."""
+    cfg = _cfg(cfg)
+    bidx = load_layers()["barrio_idx"]
+    bidx.set_aliases((cfg.get("geo") or {}).get("aliases"))
+    pts = {}
+    for r in conn.execute("SELECT lat, lng, neighborhood_portal, title FROM listing WHERE geo_precision = 'exact' "
+                          "AND lat BETWEEN ? AND ? AND lng BETWEEN ? AND ?", BBOX):
+        for nm in {r["neighborhood_portal"], title_hood(r["title"])}:
+            k = name_key(nm or "")
+            if k and bidx.match(nm) is None:
+                pts.setdefault(k, []).append((r["lat"], r["lng"]))
+    out = {}
+    for k, v in sorted(pts.items()):
+        a = np.array(v)
+        med = np.median(a, 0)
+        spread = float(np.median(np.hypot(*(to_m(a[:, 0], a[:, 1]) - to_m([med[0]], [med[1]])).T)))
+        if len(v) >= min_n and spread <= max_spread_m:
+            out[k] = (round(float(med[0]), 5), round(float(med[1]), 5), len(v), round(spread))
+    return out
+
+
 if __name__ == "__main__":
     c = db.connect()
     db.init(c)
-    run(c)
+    if "--centroids" in sys.argv:
+        for k, (la, ln, nn, sp) in suggest_centroids(c).items():
+            print(f"    {k}: [{la}, {ln}]   # n={nn}, dispersión {sp} m")
+    else:
+        run(c)

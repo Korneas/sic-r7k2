@@ -10,9 +10,9 @@ from shapely.geometry import shape
 from scraper import db, geo
 
 
-def rec(sid, lat, lng, hood=None, desc="d", approx=False):
+def rec(sid, lat, lng, hood=None, desc="d", approx=False, title="t"):
     return dict(source="fincaraiz", source_id=sid, url=f"https://x/{sid}", operation="sale", property_type="apartamento",
-                title="t", description=desc, price=300_000_000, admin_fee=None, area_m2=60.0, area_lot_m2=None,
+                title=title, description=desc, price=300_000_000, admin_fee=None, area_m2=60.0, area_lot_m2=None,
                 bedrooms=3, bathrooms=2, parking=1, floor=None, age_years=None, stratum=4, neighborhood=hood,
                 lat=lat, lng=lng, approx_location=approx, photos=[], features=[], published_at=None)
 
@@ -41,6 +41,9 @@ def main():
             rec("byname", None, None, "urbanizacion ciudad jardin"),                # sin coordenada
             rec("wrong", mlat, mlng, "Ciudad Jardín"),                              # punto en Menga, portal dice Ciudad Jardín
             rec("legal", mlat + 0.001, mlng, "Menga", desc="Se venden derechos de posesión"),
+            # T13: M2 sin ubicación = (0, 0) y barrio "Na"; el barrio sale del título (IDESC o centroide de config)
+            rec("titulo", 0.0, 0.0, "Na", title="Apartamento en Venta, Menga, Cali"),
+            rec("centro", None, None, "Bochalema", title="Apartamento en venta en Bochalema, Cali"),
         ], "t0")
         geo.run(conn, cfg)
         g = {r["listing_id"]: r for r in conn.execute("SELECT * FROM listing_geo")}
@@ -61,9 +64,14 @@ def main():
         assert prec["fr-barrio"] == "exact" and "approx" not in risks("fr-barrio")
         assert "derechos" in risks("fr-legal")["legal"]["why"]
         assert 0 <= g["fr-mall"]["proj_score"] <= 100
+        assert g["fr-titulo"]["barrio_code"] == menga["barcodigo"] and prec["fr-titulo"] == "neighborhood"
+        assert json.loads(g["fr-titulo"]["geo_note"])["src"] == "titulo"
+        bl, bg = cfg["geo"]["centroids"]["bochalema"]
+        assert abs(g["fr-centro"]["lat"] - bl) < 1e-4 and abs(g["fr-centro"]["lng"] - bg) < 1e-4, dict(g["fr-centro"])
+        assert json.loads(g["fr-centro"]["geo_note"])["src"] == "centroide" and "approx" in risks("fr-centro")
         # idempotente
         geo.run(conn, cfg)
-        assert conn.execute("SELECT COUNT(*) FROM listing_geo").fetchone()[0] == 7
+        assert conn.execute("SELECT COUNT(*) FROM listing_geo").fetchone()[0] == 9
         assert "orig" in json.loads(conn.execute("SELECT geo_note FROM listing_geo WHERE listing_id='fr-wrong'").fetchone()[0])
         print("amen_score unicentro", g["fr-mall"]["amen_score"], "rural", g["fr-rural"]["amen_score"])
     print("ok")

@@ -18,6 +18,7 @@ se guarda para los demás miembros activos de venta.
 """
 import json
 import math
+import re
 import time
 from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
@@ -37,10 +38,45 @@ DEFAULTS = dict(
     sanity=dict(z_mad=4.0, mad_floor=0.2, k_floor=3),
     zone=dict(min_n=15, trend_min_snapshots=4, trend_min_days=60, trend_window_days=365, liquidity_min_days=30),
     good_age_years=15, remodel_age_years=20, conf_k=12, new_hours=48,
+    arv=dict(cap_vs_expected=0.35, upside_cap=0.8), area_lote_min=600, mixto_pts=10,
 )
 NULL_WHY = {"sin_precio_area": "sin precio o área", "area_minima": "área menor al mínimo",
             "pm_fuera_rango": "precio/m² fuera de rango", "sin_ubicacion": "sin ubicación",
-            "sin_tipo": "sin tipo de inmueble", "pocos_comparables": "menos comparables que k_floor", "z_mad": "precio atípico vs comparables (|z_MAD|)"}
+            "sin_tipo": "sin tipo de inmueble", "pocos_comparables": "menos comparables que k_floor", "z_mad": "precio atípico vs comparables (|z_MAD|)",
+            "area_lote": "el área publicada parece la del lote, no la construida",
+            "fuera_de_cali": "el título ubica la oferta en otro municipio"}
+# T13: áreas en el texto. Número de m² junto a "lote/terreno" y junto a "construido/a".
+_NUM = r"(\d{1,2}(?:[.,]\d{3})+|\d{2,5})(?:[.,]\d{1,2})?"
+_UNIT = r"\s*(?:m2|mts2|mts|mt2|metros|m²|m\b|mt\b)"
+LOT_RX = re.compile(r"(?:lote|terreno)\D{0,20}?" + _NUM + _UNIT + "|" + _NUM + _UNIT + r"\s*(?:de |del |en )?(?:lote|terreno)")
+BUILT_RX = re.compile(r"construid[ao]s?\D{0,20}?" + _NUM + "|" + _NUM + _UNIT + r"\s*(?:de )?(?:area )?construid")
+# año de construcción en el texto ("construido en 1995", "construcción de 120 m² en el año 1995", "año de construcción 1990")
+YEAR_RX = re.compile(r"(?:construid[oa]s?|construccion|edificad[oa])[^.\n]{0,40}?(?:en|del?)\s+(?:el\s+)?(?:ano\s+)?"
+                     r"(19[4-9]\d|20[0-2]\d)\b|ano de construccion\W{0,3}(19[4-9]\d|20[0-2]\d)\b")
+CITY_RX = re.compile(r",\s*([^,]+?)\s*$")
+
+
+def _nums(rx, text):
+    return [float(re.sub(r"[.,]", "", g)) for m in rx.finditer(text) for g in m.groups() if g]
+
+
+def area_fix(r, text, lote_min):
+    """Casas: si el área del portal coincide (±3%) con un número de "lote/terreno" del texto y el texto da otra área
+    construida, se usa la construida; si no la da y el área es ≥ lote_min, el área se marca como de lote.
+    -> (área efectiva o None si es de lote, nota o None)."""
+    a = r["area_m2"]
+    if r["property_type"] != "casa" or not a:
+        return a, None
+    lots = _nums(LOT_RX, text)
+    if not any(abs(x - a) <= 0.03 * a for x in lots):
+        return a, None
+    built = [x for x in _nums(BUILT_RX, text) if 40 <= x < 0.97 * a]
+    if built:
+        b = max(built)
+        return b, f"área construida {b:,.0f} m² tomada del texto (el portal da {a:,.0f} m², que es el lote)".replace(",", ".")
+    if a >= lote_min:
+        return None, None
+    return a, None
 
 
 def _cfg(cfg):
@@ -110,21 +146,32 @@ def run(conn, cfg=None, now=None):
     now_s = now.astimezone(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     min_area = cfg.get("min_area_m2", 20)
     reno_kw = [db.norm(k) for k in cfg.get("renovated_keywords") or []]
+    mix_kw = [db.norm(k) for k in cfg.get("mixed_use_keywords") or []]
+    other_cities = {db.norm(k) for k in cfg.get("other_cities") or []}
     remo_kw = [db.norm(k) for k in cfg.get("remodel_keywords") or []]
 
     reps, members = load(conn, now, cfg, C)
     n = len(reps)
     # ---------- arreglos ----------
     pm = np.full(n, np.nan)
-    area = np.array([r["area_m2"] or np.nan for r in reps], float)
+    texts = [db.norm(f"{r['title'] or ''} {r['description'] or ''}") for r in reps]
+    area = np.full(n, np.nan)
+    area_note = [None] * n
     null_why = [None] * n
     for i, r in enumerate(reps):
-        a, p = r["area_m2"], r["price"]
-        if not a or not p:
+        a, area_note[i] = area_fix(r, texts[i], C["area_lote_min"])
+        p = r["price"]
+        cm = CITY_RX.search(r["title"] or "")
+        if cm and db.norm(cm.group(1)) in other_cities:
+            null_why[i] = "fuera_de_cali"
+        elif r["area_m2"] and a is None:
+            null_why[i] = "area_lote"
+        elif not a or not p:
             null_why[i] = "sin_precio_area"
         elif a < min_area:
             null_why[i] = "area_minima"
         else:
+            area[i] = a
             pm[i] = p / a
             if not S["pm_min"] <= pm[i] <= S["pm_max"]:
                 null_why[i] = "pm_fuera_rango"
@@ -137,10 +184,23 @@ def run(conn, cfg=None, now=None):
     X, Y = (lng - (-76.53)) * M_LNG, (lat - LAT0) * M_LAT
     strat = np.array([r["stratum_official"] if r["stratum_official"] is not None else
                       (r["stratum_portal"] if r["stratum_portal"] is not None else np.nan) for r in reps], float)
-    texts = [db.norm(f"{r['title'] or ''} {r['description'] or ''}") for r in reps]
     age = np.array([r["age_years"] if r["age_years"] is not None else np.nan for r in reps], float)
+    # T13: si el texto da un año de construcción más viejo (> 8 años) que la edad del portal, manda el texto
+    # (M2 "entre 5 y 10 años" en un edificio de 1995 metía obra nueva en su ARV)
+    this_year = int(today_cot(cfg, now)[:4])
+    age_text = 0
+    for i in range(n):
+        m = YEAR_RX.search(texts[i])
+        if m:
+            a = this_year - int(m.group(1) or m.group(2))
+            if 0 <= a and (np.isnan(age[i]) or a > age[i] + 8):
+                age[i] = a
+                age_text += 1
+    n_area = sum(1 for x in area_note if x)
+    print(f"[score] T13: edad tomada del texto en {age_text}, área construida del texto en {n_area}")
     good = np.array([(age[i] <= C["good_age_years"]) or any(k in texts[i] for k in reno_kw) for i in range(n)])
     remodel = [bool(age[i] > C["remodel_age_years"]) or any(k in texts[i] for k in remo_kw) for i in range(n)]
+    mixto = [next((k for k in mix_kw if k in texts[i]), None) for i in range(n)]
     lpm = np.log(np.where(np.isnan(pm), 1.0, pm))
     pool_ok = np.array([null_why[i] is None for i in range(n)])  # válidas como comparables
 
@@ -197,7 +257,10 @@ def run(conn, cfg=None, now=None):
             if not np.isnan(strat[i]):
                 s = strat[c]
                 c = c[np.isnan(s) | (np.abs(s - strat[i]) <= K["stratum_tol"])]
-            if age[i] > C["good_age_years"]:  # usado viejo: sin obra nueva (prima de estreno que no da un remodelado)
+            # usado (edad conocida > new_build_age; antes > good_age_years) no se compara con obra nueva: prima de
+            # estreno que no da un remodelado. No al revés: la edad "nueva" del portal falla seguido (M2 "entre 5 y 10")
+            # y filtrar los usados de una "nueva" infla su descuento.
+            if age[i] > K.get("new_build_age", 8):
                 c = c[~(age[c] <= K.get("new_build_age", 8))]
             return c
 
@@ -259,9 +322,18 @@ def run(conn, cfg=None, now=None):
         if abs(z) > S["z_mad"]:
             null_why[i] = "z_mad"
             continue
-        g = c[good[c]]
-        arv = float(np.percentile(pm[g if len(g) >= 5 else c], 75))
-        res[i] = dict(c=c, d=d, stage=stage, exp=exp, arv=arv, disc=1 - pm[i] / exp, up=arv / pm[i] - 1)
+        # ARV (T13): un usado remodelado no cobra la prima de estreno -> sin obra nueva en el pool salvo que el
+        # sujeto sea obra nueva; P75 de los de buen estado (≥ 5) o del pool; tope = expected × (1 + cap_vs_expected)
+        nb = K.get("new_build_age", 8)
+        pool = c if age[i] <= nb else c[~(age[c] <= nb)]
+        if len(pool) < 3:
+            pool = c
+        g = pool[good[pool]]
+        arv_raw = float(np.percentile(pm[g if len(g) >= 5 else pool], 75))
+        arv = min(arv_raw, exp * (1 + C["arv"]["cap_vs_expected"]))
+        up = arv / pm[i] - 1
+        res[i] = dict(c=c, d=d, stage=stage, exp=exp, arv=arv, disc=1 - pm[i] / exp,
+                      up=min(up, C["arv"]["upside_cap"]), up_capped=up > C["arv"]["upside_cap"], arv_capped=arv < arv_raw)
 
     ok_ix = sorted(res)
     disc = np.array([res[i]["disc"] for i in ok_ix])
@@ -294,6 +366,10 @@ def run(conn, cfg=None, now=None):
         if any(x.get("k") == "legal" for x in risks):
             tags.append("legal")
         pens = [x for x in risks if (x.get("pts") or 0) > 0]
+        if mixto[i]:  # T13: casa comercial / multifamiliar: los comparables residenciales no aplican bien
+            tags.append("mixto")
+            pens.append({"k": "mixto", "pts": (cfg.get("score", {}).get("penalties") or {}).get("mixto", C["mixto_pts"]),
+                         "why": f"Uso mixto o multifamiliar («{mixto[i]}»): los comparables residenciales sobrevaloran el descuento"})
         comp = dict(c=None, discount=None, upside=None, tags=tags, pd=pd, dom=dom, k=0, comps_info=None)
         row = dict(score=None, comp=comp, pens=pens, exp=None, arv=None, flip=None, comps=[], conf=None)
         if i in res:
@@ -320,8 +396,15 @@ def run(conn, cfg=None, now=None):
         if x["disc"] <= 0:
             comp["tags"].append("no_oportunidad")
         where = f"a ≤ {x['stage']:,.0f} m".replace(",", ".") if x["stage"] != "barrio" else "en el mismo barrio"
+        info = f"{k} comparables {where}, mediana {money_m(x['exp'])}/m²"
+        if area_note[i]:
+            info += f" · {area_note[i]}"
         comp.update(c=[round(v, 1) for v in cs], discount=round(x["disc"], 4), upside=round(x["up"], 4), k=k,
-                    comps_info=f"{k} comparables {where}, mediana {money_m(x['exp'])}/m²")
+                    comps_info=info)
+        if x["up_capped"]:
+            comp["upside_capped"] = True
+        if x["arv_capped"]:
+            comp["arv_capped"] = True
         if notes:
             comp["notes"] = notes
         ar = float(area[i])

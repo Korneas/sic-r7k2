@@ -58,6 +58,8 @@ def main():
             rec("rentassale", off(GOOD, -40, 0), 520_000 / 60, area=60.0),  # precio 520.000 publicado como venta
             rec("typo", off(GOOD, 0, -40), 15_000_000),                       # 3x: |z_MAD| > 4
             rec("far", FAR, 4_000_000),
+            rec("mix", off(GOOD, 30, 30), 3_750_000, description="casa multifamiliar, 3 pisos independientes"),
+            rec("yumbo", off(GOOD, -30, 30), 3_750_000, title="Apartamento en Venta, Yumbo"),
         ] + [rec(f"b{j}", off(FAR, 2000 + 150 * j, 800), 5_000_000 * (0.95 + 0.02 * j)) for j in range(5)]
         db.upsert(conn, recs, NOW_S)
         # grupos: cada una sola, salvo cheap en FR y M2
@@ -105,6 +107,12 @@ def main():
         assert any(p["k"] == "inund_nomit" and "no mitigable" in p["why"] for p in json.loads(flood["penalties"]))
         for bad in ("fr-rentassale", "fr-typo"):
             assert S[bad]["score"] is None and "sospechoso" in comp(bad)["tags"], (bad, dict(S[bad]))
+        # T13: uso mixto resta y se etiqueta; otro municipio no se puntúa; upside con tope
+        assert "mixto" in comp("fr-mix")["tags"] and any(p["k"] == "mixto" for p in json.loads(S["fr-mix"]["penalties"]))
+        assert S["fr-mix"]["score"] < cheap["score"], (S["fr-mix"]["score"], cheap["score"])
+        assert S["fr-yumbo"]["score"] is None and comp("fr-yumbo")["why_null"] == "fuera_de_cali"
+        assert comp("fr-cheap")["upside"] <= cfg["score"]["arv"]["upside_cap"]
+        assert cheap["arv_m2"] <= cheap["expected_m2"] * (1 + cfg["score"]["arv"]["cap_vs_expected"]) + 1
         far = comp("fr-far")
         assert S["fr-far"]["score"] is not None and "mismo barrio" in far["comps_info"], far
         assert S["fr-far"]["confidence"] < cheap["confidence"], (S["fr-far"]["confidence"], cheap["confidence"])

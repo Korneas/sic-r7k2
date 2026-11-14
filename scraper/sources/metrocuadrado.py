@@ -134,9 +134,9 @@ def parse(r, op, ptype):
         "floor": num(feats.get("nroPiso")),
         "age_years": age_years(feats.get("tiempoConstruido")),
         "stratum": num(r.get("estrato")),
-        "neighborhood": (r.get("mbarrio") or "").title() or None,
-        "lat": num_f(loc.get("lat")),
-        "lng": num_f(loc.get("lon")),
+        "neighborhood": None if norm(r.get("mbarrio")).strip() in ("", "na", "nn") else r["mbarrio"].title(),
+        "lat": num_f(loc.get("lat")) or None,  # sin ubicación M2 manda (0, 0)
+        "lng": num_f(loc.get("lon")) or None,
         "approx_location": r.get("ubicacionaproximada") == "S",
         "photos": photos(r),
         "features": readable,
