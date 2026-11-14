@@ -28,7 +28,7 @@ jobs:
       # la DB vive como asset del release "db" (se sobrescribe), no en el historial de git (PLAN §5.4)
       - name: bajar DB
         env: { GH_TOKEN: "${{ github.token }}" }
-        run: gh release download db -p sic.db -D data || echo "sin DB previa: arranca vacía"
+        run: gh release download db -p sic.db.gz -D data && gunzip -f data/sic.db.gz || echo "sin DB previa: arranca vacía"
       - name: modo
         id: mode
         run: |
@@ -46,11 +46,14 @@ jobs:
       - name: subir DB y commit
         env: { GH_TOKEN: "${{ github.token }}" }
         run: |
-          python -c "import sqlite3;c=sqlite3.connect('data/sic.db');c.execute('VACUUM');c.close()"
+          # geo y puntaje se recalculan en cada corrida (~15 s): no se guardan
+          cp data/sic.db /tmp/sic.db
+          python -c "import sqlite3;c=sqlite3.connect('/tmp/sic.db');c.executescript('DELETE FROM listing_geo;DELETE FROM listing_score;VACUUM');c.close()"
+          gzip -f -6 /tmp/sic.db
           git config user.name "scraper-bot"
           git config user.email "scraper-bot@users.noreply.github.com"
           gh release view db >/dev/null 2>&1 || gh release create db --title db --notes "SQLite de sic (se sobrescribe en cada corrida)"
-          gh release upload db data/sic.db --clobber
+          gh release upload db /tmp/sic.db.gz --clobber
           git add web/data
           git diff --cached --quiet && { echo "sin cambios"; exit 0; }
           git commit -q -m "data: ${{ steps.mode.outputs.mode }} $(TZ=America/Bogota date +'%Y-%m-%d %H:%M') COT"
