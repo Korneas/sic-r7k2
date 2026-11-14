@@ -193,7 +193,7 @@ Mitigaciones, en orden:
 
 **C1. Descuento frente a comparables (35%)**
 - Comparables: misma operación (venta) y tipo, activas o vistas en los últimos 90 días, área a ±30%, estrato a ±1, en un radio de 800 m (se amplía a 1,5 km y luego al barrio hasta tener k ≥ 8). Se usan como máximo los 20 más cercanos, ponderados por distancia y similitud de área.
-- `expected_m2` = mediana ponderada del precio/m² de los comparables. v2: predicción hedónica (sección 6.4).
+- `expected_m2` = mediana ponderada del precio/m² de los comparables. Desde T15, por defecto es el blend kNN^0,6 · hedónico^0,4 (`score.expected_model`, sección 6.4).
 - `discount = 1 − price_m2 / expected_m2`. Se ignora si `|z_MAD| > 4` y el precio es irreal, por ejemplo un arriendo publicado como venta o un error de dígitos: queda marcado como "dato sospechoso" y no se ranquea.
 - Una rebaja reciente (< 30 días) se muestra como etiqueta y no suma doble.
 
@@ -237,7 +237,7 @@ Notas:
 - **Calidad de OSM en Cali**: buena en centros comerciales, supermercados, parques y salud; parcial en restaurantes. Por eso los restaurantes pesan poco y se usan como densidad relativa. Con Google Places (sección 10) se sumarían ratings y cobertura completa.
 - **Centros comerciales grandes**: una lista curada en `config/anchors.yaml` (~15 malls principales con coordenada) pesa doble, porque un centro comercial grande pesa más en el valor que uno de barrio.
 - El detalle muestra las 3 amenidades más cercanas por categoría con nombre y distancia ("Unicentro a 650 m · MIO Universidades a 300 m · Parque del Perro a 900 m"). En el mapa del detalle se pueden activar como capa.
-- La v2 calibra los pesos con un modelo hedónico: la contribución real de cada distancia al precio/m² en Cali.
+- La v2 calibra los pesos con un modelo hedónico: la contribución real de cada distancia al precio/m² en Cali. **Hecho en T15:** la tabla muestra los pesos originales; los vigentes están en `config.yaml` y en la sección 6.4.
 
 **C5. Liquidez de reventa (10%)**
 
@@ -270,6 +270,18 @@ confianza = min(1, k_comparables/12) · (1 si geo exacta, 0.7 si barrio) · (1 s
 Filtros de la UI relacionados: "upside mínimo" y "solo 🔨 para remodelar". Requisitos para ranquear: `price`, `area_m2` > 20, estrato ≥ 2 y `discount` > 0. Lo demás aparece con el puntaje en gris y la etiqueta "no es oportunidad".
 
 **v2 (fase 7): modelo hedónico.** Regresión robusta (Huber o LightGBM con objetivo L1) de `log(price_m2)` sobre área, habitaciones, baños, parqueadero, antigüedad, piso, estrato, tipo, efecto fijo de barrio y distancias. Se valida con k-fold espacial por comuna. Si el MAPE fuera de muestra mejora al kNN en más de 10%, reemplaza a `expected_m2`. La residual sigue siendo el descuento.
+
+**Resultado (T15, 2026-11-14; detalle en `docs/hedonic-2026-11-14.md`).** `scraper/hedonic.py`: Huber IRLS con ridge en numpy, un modelo por tipo. Usa log área, habitaciones, baños, parqueaderos, bandas de edad, piso, estrato, log distancia a cada amenidad, proyectos, riesgos y palabras (renovado, remodelar, mixto), con efectos de comuna, barrio y celda de 300 m encogidos por ridge. En producción predice en 5 pliegues cruzados: el modelo que juzga una oferta no la vio. MAPE / MdAPE fuera de muestra sobre 13.551 ofertas:
+
+| Modelo | Validación aleatoria (como en producción) | Validación espacial (leave-comuna-group-out) |
+|---|---|---|
+| kNN | 0,186 / 0,133 | 0,186 / 0,133 |
+| Hedónico | 0,188 / 0,141 | 0,215 / 0,168 |
+| Blend kNN^0,6 · hedónico^0,4 | 0,175 / 0,127 | 0,182 / 0,135 |
+
+- **Regla del 10%:** el hedónico solo no la cumple. El blend mejora a los dos (−6% de MAPE), así que se usa `expected_model: blend`.
+- **ARV:** el hedónico (renovado y en la banda de 8 a 15 años) da ARV/expected ≈ 1,04 casi constante y vuelve redundante a C2 (corr C1-C2 sube de 0,86 a 0,91). Se mantiene el P75 de comparables (`arv.method: p75`).
+- **Pesos de C4:** salen de las elasticidades de distancia con efecto de barrio. Quedan centro comercial 27, colegios 28, gimnasio 19, bancos y droguerías 14, estación MIO, supermercado, parque y hospital 3 (piso, no significativos). Parada MIO y restaurantes quedan en 0: su elasticidad tiene el signo contrario, por confusión con el sur de estrato alto.
 
 ### 6.5 Validación
 - **Backtest proxy**: tomar como buenas compras las ventas retiradas en menos de 21 días y verificar que el puntaje sí las separa (AUC > 0,6). Con eso se recalibran los pesos.
@@ -422,8 +434,10 @@ Alertas, multiusuario o login, sincronización de favoritos, otras ciudades, arr
 | Fecha | Fase | Nota |
 |---|---|---|
 | 2026-11-14 | Plan | Volumen medido: FR ~10.850 y M2 ~9.980 (estratos 2 a 6). WFS de IDESC verificado. datos.cali.gov.co caído |
+| 2026-11-14 | Fix | Lentitud del dedupe (hasta 1.135 s) causada por las descargas de fotos; el cálculo solo toma 6 s. Se agrega `dedupe.photo_seconds: 240` como tope de tiempo por corrida |
 | 2026-11-14 | T16 ✅ | dHash de 64 bits de las primeras 3 fotos, solo para pares ambiguos (7.655), con presupuesto de 1.500 descargas por corrida y caché en la tabla `photo_hash` (persiste en la DB del release). 0 bloqueos de hotlink; se pide webp para bajar menos. Una foto común (≤ 6 bits) permite ±5% o ±10% en reposts; ≥ 2 fotos cada uno sin parecido (> 12 bits) veta el par. Primera corrida: 29 pares nuevos agrupados y 110 separados (clones de Bochalema, Ciudad Meléndez y Lili); queda 35,8% agrupado. Riesgo: un par entre portales con subconjuntos de fotos distintos puede separarse por error |
 | 2026-11-14 | T14 ✅ | QA con datos reales (`docs/qa-2026-11-14.md`): pins apilados (hasta 700 en un mismo punto) con popup "N ofertas aquí", coordenadas 0,0 fuera del mapa, "Fuera de las comunas", formato $bill., campos sucios saneados, filtro de estrato 1, filas de comuna en Zonas, métricas sin datos explicadas. 0 errores de consola. Carga de listings 314 ms; filtrar toma 10–15 ms. Zonas con < 5 ofertas no muestran mediana. **No verificado**: el render del mapa en headless (rAF no dispara) |
+| 2026-11-14 | T15 ✅ | Modelo hedónico v2 (`scraper/hedonic.py`, Huber IRLS con ridge en numpy, un modelo por tipo, efectos de comuna, barrio y celda de 300 m, predicción cruzada en 5 pliegues). MAPE / MdAPE fuera de muestra: kNN 0,186 / 0,133; hedónico 0,188 / 0,141 (no pasa la regla del 10%); blend kNN^0,6·hedónico^0,4 0,175 / 0,127 (−6%). En la validación espacial por comuna, el hedónico da 0,215 y el blend 0,182. → `score.expected_model: blend`. El ARV hedónico (≈ 1,04 × expected, casi constante) se descartó: se queda el P75 de T13. Pesos de amenidades calibrados con las elasticidades: mall 27, colegios 28, gimnasio 19, bancos 14, piso 3 para las no significativas y 0 para parada MIO y restaurantes (signo contrario). Puntaje p50 38,2 → 38,5; 5 de 10 en el top se repiten; score tarda 7 → 18 s. `data/hedonic.json` y `docs/hedonic-2026-11-14.md`. `check_score` prueba el ajuste con datos sintéticos (recupera β_área = −0,30 y el rango de barrios) |
 | 2026-11-14 | T13 ✅ | Revisión del ranking con datos reales (`docs/review-2026-11-14.md`, top 40 y 20 al azar entre P50 y P90). Errores en el top: casas de uso mixto o multifamiliares (13 de 40), upside inflado por torres nuevas o casas de lujo en el P75 (31 de 40 > 100%), área = lote, edad mal y un barrio sin alias. Arreglos: etiqueta `mixto` y −10 (`mixed_use_keywords`); ARV sin obra nueva para usados, con tope de 1,35 × expected (P85 de la relación) y upside con tope de 0,8 (UI "≥ +80%"); usados > 8 años sin comparables nuevos; edad desde el año de construcción del texto; área construida desde el texto o NULL `area_lote`; `other_cities` → NULL `fuera_de_cali`. Ubicación: (0,0) y "Na" de M2 cuentan como vacíos, barrio desde el título, `geo.aliases` y `geo.centroids` (77 barrios de portal sin polígono, mediana de las exactas; `python -m scraper.geo --centroids`). sin_ubicacion 1.707 → 253; con puntaje 84,9% → 94,8% |
 | 2026-11-14 | T12 ✅ | Actions: full a las 00:00 COT, incremental a las 06, 12 y 18, y `workflow_dispatch` con modo `pipeline`. La DB (sin tablas derivadas, gz ~15 MB) y `web-data.tar.gz` van como assets del release `db`. Cada corrida commitea solo `data/last_run.json`, lo que dispara Vercel; el build baja el tarball. Primera corrida de pipeline en Actions OK (dedupe → export en 35 s). Sitio en https://sic-r7k2.vercel.app. Token desde la env `MAPBOX_PK` (la `MAPBOX_TOKEN` quedó mal cargada y borrarla requiere aprobación humana). **Manual pendiente**: restringir el token por URL en el dashboard de Mapbox |
 | 2026-11-14 | T6 fix | Con datos reales el union-find encadenaba (grupos de hasta 684). Se pasó a complete-linkage best-first, con máximo 6 por grupo y 2 activas por portal; las coincidencias no exactas exigen ±2% y el barrio "Na" cuenta como vacío. Resultado: 36% agrupado (2.123 pares FR+M2, grupo máximo de 4). Revisión manual de 10 grupos entre portales: todos son el mismo inmueble |
@@ -470,7 +484,7 @@ Asignación de modelo: **opus** para tareas de diseño o algoritmos (puntaje, de
 | T12 | GitHub Actions (cron full + incremental, probe) y deploy en Vercel; restringir el token de Mapbox | T4, T9 | sonnet | ✅ |
 | T13 | Primera corrida full real, revisión del top 20, ajustes | T8, T12 | opus | ✅ |
 | T14 | QA de la UI (`break-ui`, móvil 390 px, consola limpia) y pulido | T10, T11 | sonnet | ✅ |
-| T15 | v2: modelo hedónico con validación espacial; pesos de amenidades calibrados | T13 | opus | ⬜ |
+| T15 | v2: modelo hedónico con validación espacial; pesos de amenidades calibrados | T13 | opus | ✅ |
 | T16 | Hash de fotos en el dedupe y detección de republicadas | T13 | sonnet | ✅ |
 
 Para que T10 no espere a T9, el contrato de `listings.json` se define en T4 (`docs/data-contract.md`) y T10 arranca con un fixture.

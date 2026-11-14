@@ -137,6 +137,9 @@ def hash_for_pairs(conn, pairs, cfg, only_n=None):
                 if stats["net_fail"] >= 30 and stats["ok"] == 0:
                     stats["aborted"] = True
                     break
+                if time.time() - t0 > float(dc.get("photo_seconds", 240)):  # tope de tiempo: lo que falte sigue en la próxima corrida
+                    stats["aborted"] = "tiempo"
+                    break
     finally:
         client.close()
     stats["seconds"] = round(time.time() - t0, 1)

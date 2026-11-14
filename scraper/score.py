@@ -11,8 +11,12 @@ se guarda para los demás miembros activos de venta.
    máximo k_max más cercanos. Pesos: distancia 1/(1+d/400) × similitud de área. Se excluye el propio grupo.
    expected_m2 = mediana ponderada. Dos pasadas: la primera marca |z_MAD| > z_mad (log precio/m², escala con piso
    mad_floor) como sospechosos, que salen del pool de la segunda.
+   T15: con score.expected_model = hedonic | blend, expected_m2 pasa a ser la predicción hedónica (scraper/hedonic.py,
+   cruzada: el modelo que juzga a una oferta no la vio) o la media geométrica kNN^(1−w)·hedónico^w. El kNN sigue
+   dando comparables, z_MAD, pocos_comparables y confianza.
 3. C2: ARV_m2 = P75 de comparables en buen estado (edad ≤ good_age_years o palabras de renovado) si hay ≥ 5, si no
-   P75 de todos. upside = ARV_m2/pm − 1. C3 = 0,6·tendencia + 0,4·proj_score. C4 = amen_score. C5 = liquidez.
+   P75 de todos (score.arv.method = hedonic: la misma oferta renovada y en la banda de buen estado).
+   upside = ARV_m2/pm − 1. C3 = 0,6·tendencia + 0,4·proj_score. C4 = amen_score. C5 = liquidez.
 4. C1 y C2 se normalizan como percentil 0-100 entre todas las puntuables de la ciudad (C2 = 0 si upside ≤ 0).
    score = clamp(Σ w·C − Σ penalizaciones, 0, 100) · (0,6 + 0,4·confianza).
 """
@@ -26,7 +30,7 @@ from datetime import date, datetime, timedelta, timezone
 import numpy as np
 import yaml
 
-from scraper import db, dedupe
+from scraper import db, dedupe, hedonic
 from scraper.zones import comuna_key, sanity, today_cot, ts
 
 LAT0 = 3.43
@@ -38,7 +42,8 @@ DEFAULTS = dict(
     sanity=dict(z_mad=4.0, mad_floor=0.2, k_floor=3),
     zone=dict(min_n=15, trend_min_snapshots=4, trend_min_days=60, trend_window_days=365, liquidity_min_days=30),
     good_age_years=15, remodel_age_years=20, conf_k=12, new_hours=48,
-    arv=dict(cap_vs_expected=0.35, upside_cap=0.8), area_lote_min=600, mixto_pts=10,
+    arv=dict(cap_vs_expected=0.35, upside_cap=0.8, method="p75"), area_lote_min=600, mixto_pts=10,
+    expected_model="knn", hedonic=dict(hedonic.DEFAULTS),
 )
 NULL_WHY = {"sin_precio_area": "sin precio o área", "area_minima": "área menor al mínimo",
             "pm_fuera_rango": "precio/m² fuera de rango", "sin_ubicacion": "sin ubicación",
@@ -111,6 +116,7 @@ def load(conn, now, cfg, C):
     rows = [dict(r) for r in conn.execute(
         "SELECT l.id, COALESCE(l.group_id, l.id) gid, l.url, l.property_type, l.price, l.area_m2, l.age_years, "
         "l.stratum_portal, l.title, l.description, l.geo_precision, l.status, l.first_seen, l.last_seen, "
+        "l.bedrooms, l.bathrooms, l.parking, l.floor, g.amenities, g.projects, "
         "g.lat glat, g.lng glng, g.barrio_code, g.barrio, g.comuna, g.stratum_official, g.amen_score, g.proj_score, "
         "g.risks FROM listing l LEFT JOIN listing_geo g ON g.listing_id = l.id WHERE l.operation = 'sale'")]
     by_gid = defaultdict(list)
@@ -137,7 +143,7 @@ def load(conn, now, cfg, C):
     return reps, members
 
 
-def run(conn, cfg=None, now=None):
+def run(conn, cfg=None, now=None, validate=False):
     t0 = time.time()
     cfg = cfg or yaml.safe_load(open("config.yaml", encoding="utf-8"))
     C = _cfg(cfg)
@@ -305,6 +311,25 @@ def run(conn, cfg=None, now=None):
     # ---------- zonas (C3, C5) ----------
     zone = zone_context(conn, cfg, C, now)
 
+    # ---------- v2 hedónico (T15): predicción cruzada; el kNN sigue dando comparables, z_MAD y confianza ----------
+    model, H = C["expected_model"], C["hedonic"]
+    hp = None
+    act = np.array([r["active"] for r in reps])
+    if model != "knn" or C["arv"].get("method") == "hedonic" or validate:
+        exact = np.array([r["geo_precision"] == "exact" for r in reps])
+        train = valid2 & act & (exact if H["train"] == "exact" else True)
+        if train.sum() >= H["min_train"]:
+            hedonic.DEFAULTS.update(H)
+            reno = [any(k in texts[i] for k in reno_kw) for i in range(n)]
+            remo_t = [any(k in texts[i] for k in remo_kw) for i in range(n)]
+            F = hedonic.frame(reps, np.where(np.isnan(pm), 1.0, pm), area, age, strat, reno, remo_t,
+                              [m is not None for m in mixto], X, Y)
+            HP, HA, hfold, hmodel = hedonic.crossfit(F, train, np.nonzero(valid2 & act)[0], H["folds"])
+            hp = True
+            print(f"[score] hedónico: {int(train.sum())} de entrenamiento, modelo={model}, ARV={C['arv'].get('method')}")
+        else:
+            print(f"[score] hedónico: solo {int(train.sum())} para entrenar (< {H['min_train']}): se usa kNN")
+
     # ---------- pasada 2: sujetos ----------
     subj = [i for i, r in enumerate(reps) if r["active"]]
     res = {}
@@ -322,6 +347,12 @@ def run(conn, cfg=None, now=None):
         if abs(z) > S["z_mad"]:
             null_why[i] = "z_mad"
             continue
+        exp_knn = exp
+        hed = math.exp(HP[hfold[i], i]) if hp is not None and np.isfinite(HP[hfold[i], i]) else None
+        if hed and model == "hedonic":
+            exp = hed
+        elif hed and model == "blend":  # media geométrica ponderada
+            exp = exp_knn ** (1 - H["blend_w"]) * hed ** H["blend_w"]
         # ARV (T13): un usado remodelado no cobra la prima de estreno -> sin obra nueva en el pool salvo que el
         # sujeto sea obra nueva; P75 de los de buen estado (≥ 5) o del pool; tope = expected × (1 + cap_vs_expected)
         nb = K.get("new_build_age", 8)
@@ -329,12 +360,19 @@ def run(conn, cfg=None, now=None):
         if len(pool) < 3:
             pool = c
         g = pool[good[pool]]
-        arv_raw = float(np.percentile(pm[g if len(g) >= 5 else pool], 75))
+        arv_p75 = float(np.percentile(pm[g if len(g) >= 5 else pool], 75))
+        arv_hed = exp * math.exp(HA[hfold[i], i] - HP[hfold[i], i]) if hed else None
+        arv_raw = arv_hed if arv_hed and C["arv"].get("method") == "hedonic" else arv_p75
         arv = min(arv_raw, exp * (1 + C["arv"]["cap_vs_expected"]))
         up = arv / pm[i] - 1
-        res[i] = dict(c=c, d=d, stage=stage, exp=exp, arv=arv, disc=1 - pm[i] / exp,
+        res[i] = dict(c=c, d=d, stage=stage, exp=exp, exp_knn=exp_knn, exp_hed=hed, arv=arv, arv_p75=arv_p75,
+                      arv_hed=arv_hed, disc=1 - pm[i] / exp,
                       up=min(up, C["arv"]["upside_cap"]), up_capped=up > C["arv"]["upside_cap"], arv_capped=arv < arv_raw)
 
+    if validate:
+        skey = np.array([(r["comuna"] and f"C{r['comuna']}") or f"g{np.nan_to_num(X[i]) // 3000:.0f}_{np.nan_to_num(Y[i]) // 3000:.0f}"
+                         for i, r in enumerate(reps)])
+        return hedonic.validate(F, train, res, pm, skey, hmodel, C, cfg)
     ok_ix = sorted(res)
     disc = np.array([res[i]["disc"] for i in ok_ix])
     ups = np.array([res[i]["up"] for i in ok_ix])
@@ -396,7 +434,10 @@ def run(conn, cfg=None, now=None):
         if x["disc"] <= 0:
             comp["tags"].append("no_oportunidad")
         where = f"a ≤ {x['stage']:,.0f} m".replace(",", ".") if x["stage"] != "barrio" else "en el mismo barrio"
-        info = f"{k} comparables {where}, mediana {money_m(x['exp'])}/m²"
+        info = f"{k} comparables {where}, mediana {money_m(x['exp_knn'])}/m²"
+        if x["exp_hed"] and model != "knn":
+            info += f"; modelo hedónico {money_m(x['exp_hed'])}/m²"
+            comp.update(exp_knn=round(x["exp_knn"]), exp_hed=round(x["exp_hed"]))
         if area_note[i]:
             info += f" · {area_note[i]}"
         comp.update(c=[round(v, 1) for v in cs], discount=round(x["disc"], 4), upside=round(x["up"], 4), k=k,

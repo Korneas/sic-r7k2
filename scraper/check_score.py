@@ -128,6 +128,8 @@ def main():
               "far", S["fr-far"]["score"], S["fr-far"]["confidence"], far["comps_info"])
         print("components", cheap["components"])
 
+    check_hedonic()
+
     # rendimiento: ~10k ventas activas
     with tempfile.TemporaryDirectory() as d:
         conn = db.connect(os.path.join(d, "p.db"))
@@ -151,6 +153,35 @@ def main():
         print(f"perf: 12000 ventas en {secs:.1f}s", r)
         assert secs < 60
     print("ok")
+
+
+def check_hedonic():
+    """T15: precio/m² sintético = efecto de barrio × área^−0,3 × ruido con 5% de outliers; el ajuste recupera la
+    elasticidad del área y el orden de los barrios, y la predicción cruzada no ve a la oferta."""
+    import numpy as np
+    from scraper import hedonic
+    rnd = np.random.default_rng(3)
+    n, eff = 2000, np.linspace(-0.4, 0.4, 10)
+    b = rnd.integers(0, 10, n)
+    area = np.exp(rnd.uniform(math.log(40), math.log(250), n))
+    lpm = 15.3 + eff[b] - 0.3 * np.log(area / 80) + rnd.normal(0, 0.1, n) + (rnd.random(n) < 0.05) * 1.5
+    reps = [dict(property_type="apartamento", barrio_code=f"B{k}", comuna=str(k // 5), geo_precision="exact")
+            for k in b]
+    nan = np.full(n, np.nan)
+    F = hedonic.frame(reps, np.exp(lpm), area, nan, nan, np.zeros(n), np.zeros(n), np.zeros(n),
+                      rnd.uniform(0, 9000, n), rnd.uniform(0, 9000, n))
+    m = hedonic.Model().fit(F, np.arange(n)).parts["apartamento"]
+    beta = m["b"][m["names"].index("log_area")]
+    assert abs(beta + 0.3) < 0.05, beta
+    fe = np.array([m["b"][m["names"].index(f"comuna:{k // 5}")] + m["b"][m["names"].index(f"barrio:B{k}")]
+                   for k in range(10)])
+    assert np.corrcoef(fe, eff)[0, 1] > 0.95 and abs((fe[-1] - fe[0]) - 0.8) < 0.2, fe
+    P, PA, fold, _ = hedonic.crossfit(F, np.ones(n, bool), np.arange(n), 5)
+    oof = P[fold, np.arange(n)]
+    ape = np.abs(np.exp(oof) / np.exp(lpm) - 1)
+    assert np.median(ape) < 0.12, np.median(ape)
+    assert np.all(PA[fold, np.arange(n)] >= oof - 1e-9)  # ARV: renovado y buena edad no bajan el precio
+    print(f"hedonic ok: β_área={beta:.3f}, rango barrios={fe[-1] - fe[0]:.2f} (real 0,80), MdAPE OOF={np.median(ape):.3f}")
 
 
 if __name__ == "__main__":
