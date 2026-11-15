@@ -60,6 +60,115 @@
   var AMEN = { mio: 'MIO troncal', mio_stop: 'Parada MIO', mall: 'Centros comerciales', super: 'Supermercados', park: 'Parques', health: 'Clínicas y hospitales', edu: 'Colegios y universidades', food: 'Restaurantes y cafés', bank: 'Bancos y droguerías', gym: 'Deporte' };
   var PROJ = { renov: 'Renovación urbana', plan_parcial: 'Plan parcial', mio_proy: 'Troncal MIO proyectada', corredor_verde: 'Corredor Verde', tren: 'Tren de cercanías', plusvalia: 'Plusvalía' };
 
+  // ---------- gráficas SVG (sin librerías; el color sale de clases → tokens de styles.css) ----------
+  function r1(v) { return Math.round(v * 10) / 10; }
+  function svgWrap(w, h, label, body) {
+    return '<svg class="viz" width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '" role="img" aria-label="' + esc(label) + '">' + body + '</svg>';
+  }
+  function tx(x, y, s, cls, anchor) {
+    return '<text x="' + r1(x) + '" y="' + r1(y) + '"' + (cls ? ' class="' + cls + '"' : '') + (anchor ? ' text-anchor="' + anchor + '"' : '') + '>' + esc(s) + '</text>';
+  }
+  /* Barra horizontal: base cuadrada en x0, punta con radio 4. */
+  function hbar(x0, y, w, h, cls) {
+    var r = Math.min(4, w / 2, h / 2);
+    return '<path class="' + cls + '" d="M' + r1(x0) + ',' + y + 'h' + r1(w - r) + 'a' + r + ',' + r + ' 0 0 1 ' + r + ',' + r + 'v' + (h - 2 * r) +
+      'a' + r + ',' + r + ' 0 0 1 -' + r + ',' + r + 'h-' + r1(w - r) + 'z"/>';
+  }
+  function median(a) { var s = a.slice().sort(function (x, y) { return x - y; }), n = s.length; return n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2; }
+  /* Tarjeta: punto sobre un riel centrado en 0 % (±40 %); izquierda = más barato que el esperado. */
+  function microDisc(d) {
+    var k = Math.max(-1, Math.min(1, -d / 0.4)), x = r1(28 + k * 24), g = d > 0;
+    var t = 'Precio/m² ' + (Math.abs(d) < 0.005 ? 'igual al' : pct(Math.abs(d)) + (g ? ' por debajo del' : ' por encima del')) + ' esperado (riel: −40 % a +40 %)';
+    return '<svg class="viz micro" width="56" height="14" viewBox="0 0 56 14" aria-hidden="true"><title>' + esc(t) + '</title>' +
+      '<line class="v-rail" x1="3" x2="53" y1="7" y2="7"/><line class="v-tick" x1="28" x2="28" y1="2" y2="12"/>' +
+      '<line class="' + (g ? 'v-good-s' : 'v-mut-s') + '" x1="28" x2="' + x + '" y1="7" y2="7"/>' +
+      '<circle class="' + (g ? 'v-good' : 'v-mut') + ' v-ring" cx="' + x + '" cy="7" r="3.5"/></svg>';
+  }
+  var SHORT = ['Descuento', 'Reventa', 'Valorización', 'Amenidades', 'Liquidez'];
+  function vizComp(l, d, W, anim) {
+    var c = l.c || [0, 0, 0, 0, 0], z = d.zone || {};
+    var na = [false, false, z.trend_12m == null, false, c[4] === 50];  // 50 = neutro por falta de datos (scraper/score.py)
+    var LW = 100, BW = Math.max(60, W - LW - 84), RH = 34, body = '';
+    COMP.forEach(function (k, i) {
+      var y = i * RH, v = Math.max(0, Math.min(100, c[i] || 0)), w = BW * v / 100, vs = String(Math.round(v));
+      var tip = 'C' + (i + 1) + ' ' + k.k + ' (' + Math.round(k.w * 100) + ' % del puntaje): ' + vs + ' de 100 · ' + k.note +
+        (na[i] ? (i === 2 ? ' · sin tendencia de zona: cuenta como 50' : ' · sin datos: valor neutro 50') : '');
+      body += '<g><title>' + esc(tip) + '</title>' +
+        tx(0, y + 14, SHORT[i], 't-ink') + tx(0, y + 28, Math.round(k.w * 100) + ' % del puntaje') +
+        '<rect class="v-track" x="' + LW + '" y="' + (y + 10) + '" width="' + r1(BW) + '" height="10" rx="2"/>' +
+        (w > 0 ? '<g' + (anim ? ' class="grow"' : '') + '>' + hbar(LW, y + 10, w, 10, na[i] ? 'v-na' : 'v-bar') + '</g>' : '') +
+        tx(LW + w + 6, y + 19, vs, 't-ink') + (na[i] ? tx(LW + w + 12 + vs.length * 7, y + 19, 'sin datos') : '') + '</g>';
+    });
+    return svgWrap(W, RH * 5 - 4, 'Componentes del puntaje de 0 a 100: ' + COMP.map(function (k, i) { return SHORT[i] + ' ' + Math.round(c[i] || 0); }).join(', '), body);
+  }
+  function vizComps(l, d, W) {
+    var pms = (d.comps || []).map(function (k) { return k.pm; }).filter(function (v) { return v > 0; });
+    if (pms.length < 3) return '';
+    var med = median(pms);
+    var marks = [{ v: med, t: 'Mediana ' + copM1(med), cls: 'v-mark' }];
+    if (d.expected_m2) marks.push({ v: d.expected_m2, t: 'Esperado ' + copM1(d.expected_m2), cls: 'v-mark v-dash' });
+    if (d.arv_m2) marks.push({ v: d.arv_m2, t: 'ARV ' + copM1(d.arv_m2), cls: 'v-mark-g v-dash' });
+    var vals = pms.concat(marks.map(function (m) { return m.v; })); if (l.pm) vals.push(l.pm);
+    var lo = Math.min.apply(null, vals), hi = Math.max.apply(null, vals), pad = (hi - lo) * 0.04 || hi * 0.05;
+    lo -= pad; hi += pad;
+    var P = 8, X = function (v) { return P + (v - lo) / (hi - lo) * (W - 2 * P); };
+    // Etiquetas de las marcas: filas sobre el eje, sin solaparse (la línea vertical hace de guía).
+    var rows = [], LH = 15;
+    marks.sort(function (a, b) { return a.v - b.v; }).forEach(function (m) {
+      var w = m.t.length * 6.2, cx = Math.max(w / 2, Math.min(W - w / 2, X(m.v))), r = 0;
+      while (rows[r] && rows[r].some(function (s) { return cx - w / 2 < s[1] + 8 && cx + w / 2 > s[0] - 8; })) r++;
+      (rows[r] = rows[r] || []).push([cx - w / 2, cx + w / 2]);
+      m.cx = cx; m.r = r;
+    });
+    var ay = rows.length * LH + 16, body = '<line class="v-axis" x1="0" x2="' + W + '" y1="' + ay + '" y2="' + ay + '"/>';
+    marks.forEach(function (m) {
+      body += '<line class="' + m.cls + '" x1="' + r1(X(m.v)) + '" x2="' + r1(X(m.v)) + '" y1="' + (ay - 10 - m.r * LH) + '" y2="' + (ay + 8) + '"><title>' + esc(m.t) + '/m²</title></line>';
+    });
+    marks.forEach(function (m) { body += tx(m.cx, ay - 14 - m.r * LH, m.t, 't-2 t-halo', 'middle'); });
+    (d.comps || []).forEach(function (k) {
+      if (!(k.pm > 0)) return;
+      body += '<circle class="v-mut v-ring" cx="' + r1(X(k.pm)) + '" cy="' + ay + '" r="4"><title>' + esc(copM1(k.pm) + '/m² · ' + NF.format(k.a) + ' m² · a ' + meters(k.dist)) + '</title></circle>';
+    });
+    var mn = Math.min.apply(null, pms), mx = Math.max.apply(null, pms);
+    body += tx(X(mn), ay + 36, copM1(mn), '', 'start') + tx(X(mx), ay + 36, copM1(mx), '', 'end');
+    if (l.pm) {
+      var ox = X(l.pm), ot = 'Esta oferta ' + copM1(l.pm), ow = ot.length * 6.4;
+      body += '<circle class="v-acc v-ring" cx="' + r1(ox) + '" cy="' + ay + '" r="6"><title>' + esc(ot) + '/m²</title></circle>' +
+        tx(Math.max(ow / 2, Math.min(W - ow / 2, ox)), ay + 22, ot, 't-ink t-halo', 'middle');
+    }
+    return svgWrap(W, ay + 42, 'Precio por m² de ' + pms.length + ' comparables, de ' + copM1(mn) + ' a ' + copM1(mx) + '; mediana ' + copM1(med) + (l.pm ? '; esta oferta ' + copM1(l.pm) : ''), body);
+  }
+  function vizHist(l, h, W) {
+    if (h.length < 2) return '';
+    var pts = h.map(function (x) { return { t: Date.parse(x.d + 'T12:00:00'), p: x.p, d: x.d }; });
+    var t0 = pts[0].t, t1 = Math.max(today.getTime(), pts[pts.length - 1].t); if (t1 <= t0) t1 = t0 + 864e5;
+    var ps = pts.map(function (x) { return x.p; }), lo = Math.min.apply(null, ps), hi = Math.max.apply(null, ps);
+    var span = Math.max(hi - lo, hi * 0.1), pad = (span - (hi - lo)) / 2 + span * 0.1;  // escala mínima ±5 %: no exagerar cambios chicos
+    var H = 112, top = 22, bot = H - 26, P = 6;
+    // Si todo pasó en menos de 2 días, los escalones van espaciados por orden y no por fecha.
+    var byIdx = pts[pts.length - 1].t - t0 < 2 * 864e5, n = pts.length;
+    if (byIdx) pts.forEach(function (x, i) { x.t = i; }), t0 = 0, t1 = n;
+    var X = function (t) { return P + (t - t0) / (t1 - t0) * (W - 2 * P); }, Y = function (p) { return bot - (p - lo + pad) / (hi - lo + 2 * pad) * (bot - top); };
+    var dPath = 'M' + r1(X(t0)) + ',' + r1(Y(pts[0].p));
+    pts.forEach(function (x, i) { if (i) dPath += 'H' + r1(X(x.t)) + 'V' + r1(Y(x.p)); });
+    dPath += 'H' + r1(X(t1));
+    var last = pts[pts.length - 1], ch = last.p / pts[0].p - 1;
+    var body = '<line class="v-axis" x1="0" x2="' + W + '" y1="' + bot + '" y2="' + bot + '"/><path class="v-line" d="' + dPath + '"/>';
+    pts.forEach(function (x, i) {
+      body += '<circle class="' + (i === pts.length - 1 ? 'v-acc' : 'v-mut') + ' v-ring" cx="' + r1(X(x.t)) + '" cy="' + r1(Y(x.p)) + '" r="4"><title>' + esc(fmtDate(x.d) + ': ' + copFull(x.p)) + '</title></circle>';
+    });
+    body += tx(0, Y(pts[0].p) - 9, cop(pts[0].p), 't-2 t-halo', 'start') +
+      tx(W, Y(last.p) - 9, cop(last.p) + ' (' + pct(ch, true) + ')', 't-ink t-halo', 'end') +
+      tx(0, H - 8, fmtDate(pts[0].d), '', 'start') + tx(W, H - 8, byIdx ? fmtDate(last.d) + ' · ' + (n - 1) + (n === 2 ? ' cambio' : ' cambios') : t1 > last.t ? 'hoy' : fmtDate(last.d), '', 'end');
+    return svgWrap(W, H, 'Historial de precio: de ' + cop(pts[0].p) + ' a ' + cop(last.p) + ' (' + pct(ch, true) + ') en ' + pts.length + ' registros', body);
+  }
+  function drawViz(l, d, anim) {
+    var put = function (k, f) { var el = detailBody.querySelector('[data-viz="' + k + '"]'); if (el) el.innerHTML = f(Math.floor(el.clientWidth)); };
+    put('comp', function (W) { return vizComp(l, d, W, anim && !REDUCED.matches); });
+    put('comps', function (W) { return vizComps(l, d, W); });
+    put('hist', function (W) { return vizHist(l, d.history || [], W); });
+  }
+
   // ---------- favoritos ----------
   var FAV_KEY = 'sic.favs';
   var favs = new Set();
@@ -415,7 +524,7 @@
   // Acciones de teclado sin animación (Emil): se marca la modalidad de entrada.
   document.addEventListener('keydown', function (e) { if (e.key !== 'Shift') document.documentElement.classList.add('kbd'); }, true);
   document.addEventListener('pointerdown', function () { document.documentElement.classList.remove('kbd'); }, true);
-  window.addEventListener('resize', debounce(function () { if (panelOpen) positionPanel(); layoutSheet(); }, 100));
+  window.addEventListener('resize', debounce(function () { if (panelOpen) positionPanel(); layoutSheet(); if (vizOn && current && current.id === vizOn.l.id) drawViz(vizOn.l, vizOn.d, false); }, 100));
 
   // ---------- conteo y lista ----------
   function renderCount(bb) {
@@ -445,7 +554,7 @@
       ? '<img src="' + esc(l.img) + '" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" width="132" height="112" onerror="this.replaceWith(Object.assign(document.createElement(\'div\'),{className:\'no-photo\',textContent:\'Foto no disponible\'}))">'
       : '<div class="no-photo">Sin fotos</div>';
     var deltas = '';
-    if (l.d != null) deltas += l.d > 0 ? '<span class="dchip">' + pct(-l.d) + ' vs zona</span>' : '<span class="dchip flat">' + pct(-l.d, true) + ' vs zona</span>';
+    if (l.d != null) deltas += (l.d > 0 ? '<span class="dchip">' + pct(-l.d) + ' vs zona</span>' : '<span class="dchip flat">' + pct(-l.d, true) + ' vs zona</span>');
     if (l.up != null && l.up > 0) deltas += '<span class="dchip">upside ' + upTxt(l.up) + '</span>';
     var meta = '<span>E' + (l.e || '?') + '</span>' +
       '<span>' + (l.a ? NF.format(l.a) + ' m²' : 'sin área') + '</span>' +
@@ -465,7 +574,7 @@
       '<div class="card-photo">' + photo + '<span class="rank" aria-label="Posición ' + (i + 1) + '">' + (i + 1) + '</span></div>' +
       '<div class="card-body">' +
       '<div class="card-row1"><div><div class="price">' + cop(l.p) + '</div>' +
-      '<div class="pm">' + (l.t === 'c' ? 'Casa' : 'Apto') + ' · ' + (l.pm ? copM1(l.pm) + '/m²' : 'sin $/m²') + '</div></div>' + scoreBadge(l.s) + '</div>' +
+      '<div class="pm">' + (l.t === 'c' ? 'Casa' : 'Apto') + ' · ' + (l.pm ? copM1(l.pm) + '/m²' : 'sin $/m²') + (l.d != null ? microDisc(l.d) : '') + '</div></div>' + scoreBadge(l.s) + '</div>' +
       (deltas ? '<div class="deltas">' + deltas + '</div>' : '') +
       '<div class="br" title="' + esc(l.br) + '">' + esc(l.br || 'Barrio sin dato') + '</div>' +
       '<div class="meta">' + meta + '</div>' +
@@ -543,8 +652,12 @@
   document.addEventListener('scroll', function () { tip.hidden = true; }, true);
 
   // ---------- mapa ----------
-  var RAMP = { 0: '#46327e', 1: '#365c8d', 2: '#277f8e', 3: '#1fa187', 4: '#a0da39', n: '#b3bcb8' };
-  var RAMP_INK = { 0: '#ffffff', 1: '#ffffff', 2: '#ffffff', 3: '#06231a', 4: '#14200a', n: '#1b2521' };
+  // Viridis solo para el puntaje (pines y badge). Lo demás del mapa: neutros + acento (= tokens de styles.css).
+  var RAMP = { 0: '#46327e', 1: '#365c8d', 2: '#277f8e', 3: '#1fa187', 4: '#a0da39', n: '#b8b8b8' };
+  var RAMP_INK = { 0: '#ffffff', 1: '#ffffff', 2: '#ffffff', 3: '#06231a', 4: '#14200a', n: '#1a1a1a' };
+  var K = DARK.matches
+    ? { ink: '#ececec', ink3: '#959595', bg: '#111111', surf: '#1a1a1a', acc: '#8fb3ff', good: '#5fd3a0', warn: '#f0b765', bad: '#ff8d97' }
+    : { ink: '#171717', ink3: '#696969', bg: '#ffffff', surf: '#ffffff', acc: '#2456c4', good: '#16704f', warn: '#c77800', bad: '#a3283a' };
   function feature(l) {
     if (!l._f) {
       var b = bin(l.s);
@@ -579,10 +692,10 @@
     map.on('error', function (e) { if (e && e.error && /401|403|token/i.test(String(e.error.message || e.error.status))) mapFail('El token de Mapbox no es válido para este dominio.'); });
     map.on('load', function () {
       Object.keys(RAMP).forEach(function (k) {
-        var p = pinImage(RAMP[k], DARK.matches ? '#0e1412' : '#ffffff', 1.5);
+        var p = pinImage(RAMP[k], K.bg, 1.5);
         map.addImage('pin-' + k, p.img, p.opts);
       });
-      var hl = pinImage(DARK.matches ? '#e4ebe8' : '#14201b', DARK.matches ? '#7fc3dd' : '#1d5a74', 3);
+      var hl = pinImage(K.ink, K.acc, 3);
       map.addImage('pin-hl', hl.img, hl.opts);
 
       map.addSource('l', { type: 'geojson', data: fc([]), cluster: true, clusterRadius: 46, clusterMaxZoom: 14,
@@ -592,14 +705,14 @@
         return ['case', ['<', ['get', prop], 0], RAMP.n, ['step', ['get', prop], RAMP[0], 40, RAMP[1], 55, RAMP[2], 70, RAMP[3], 85, RAMP[4]]];
       };
       map.addLayer({ id: 'clusters', type: 'circle', source: 'l', filter: ['has', 'point_count'], paint: {
-        'circle-color': DARK.matches ? '#1d2724' : '#ffffff',
+        'circle-color': K.surf,
         'circle-radius': ['step', ['get', 'point_count'], 15, 20, 19, 100, 24, 400, 30],
         'circle-stroke-width': 4, 'circle-stroke-color': stepColor('maxs') } });
       map.addLayer({ id: 'cluster-n', type: 'symbol', source: 'l', filter: ['has', 'point_count'], layout: {
         'text-field': ['number-format', ['get', 'cnt'], { locale: 'es-CO' }], 'text-size': 12, 'text-font': ['DIN Pro Bold', 'Arial Unicode MS Bold'] },
-        paint: { 'text-color': DARK.matches ? '#e4ebe8' : '#14201b' } });
+        paint: { 'text-color': K.ink } });
       map.addLayer({ id: 'dots', type: 'circle', source: 'l', filter: ['!', ['has', 'point_count']], paint: {
-        'circle-radius': 4, 'circle-color': stepColor('sv'), 'circle-stroke-width': 1, 'circle-stroke-color': DARK.matches ? '#0e1412' : '#fff' } });
+        'circle-radius': 4, 'circle-color': stepColor('sv'), 'circle-stroke-width': 1, 'circle-stroke-color': K.bg } });
       map.addLayer({ id: 'pins', type: 'symbol', source: 'l', filter: ['!', ['has', 'point_count']], layout: {
         'icon-image': ['concat', 'pin-', ['get', 'bin']], 'icon-text-fit': 'both', 'icon-text-fit-padding': [2, 6, 2, 6],
         'text-field': ['get', 'label'], 'text-size': 12, 'text-font': ['DIN Pro Bold', 'Arial Unicode MS Bold'],
@@ -610,7 +723,7 @@
         'icon-image': 'pin-hl', 'icon-text-fit': 'both', 'icon-text-fit-padding': [3, 8, 3, 8],
         'text-field': ['get', 'label'], 'text-size': 13, 'text-font': ['DIN Pro Bold', 'Arial Unicode MS Bold'],
         'icon-allow-overlap': true, 'text-allow-overlap': true },
-        paint: { 'text-color': DARK.matches ? '#0e1412' : '#ffffff' } });
+        paint: { 'text-color': K.bg } });
 
       ['pins', 'dots'].forEach(function (layer) {
         map.on('mousemove', layer, function (e) { map.getCanvas().style.cursor = 'pointer'; setHot(e.features[0].properties.id, 'map'); });
@@ -679,7 +792,6 @@
   function ensureLayer(k) {
     if (layerLoaded[k]) return layerLoaded[k];
     var below = 'clusters';  // debajo de los pines de ofertas
-    var D = DARK.matches;
     var addAll = function (defs) { defs.forEach(function (d) { if (!map.getSource(d.id)) map.addSource(d.id, { type: 'geojson', data: d.data }); d.layers.forEach(function (ly) { ly.source = d.id; map.addLayer(ly, below); }); }); };
     if (k === 'heat') {
       layerLoaded[k] = Promise.resolve().then(function () {
@@ -698,20 +810,20 @@
         var names = LAYERS[1].files;
         addAll(names.map(function (n, i) {
           return { id: n, data: g[i], layers: [
-            { id: n + '-f', type: 'fill', paint: { 'fill-color': n === 'inundacion_pluvial' ? '#4aa3df' : '#1b6fd0', 'fill-opacity': n === 'inundacion_no_mitigable' ? 0.55 : 0.32 } },
-            { id: n + '-l', type: 'line', paint: { 'line-color': '#1b6fd0', 'line-width': 0.6, 'line-opacity': 0.7 } }] };
+            { id: n + '-f', type: 'fill', paint: { 'fill-color': n === 'inundacion_no_mitigable' ? K.bad : K.warn, 'fill-opacity': n === 'inundacion_no_mitigable' ? 0.45 : n === 'inundacion_pluvial' ? 0.2 : 0.3 } },
+            { id: n + '-l', type: 'line', paint: { 'line-color': K.warn, 'line-width': 0.6, 'line-opacity': 0.7 } }] };
         }));
       });
     } else if (k === 'reno') {
       layerLoaded[k] = loadGJ('tratamientos_renovacion').then(function (g) {
         addAll([{ id: 'reno', data: g, layers: [
-          { id: 'reno-f', type: 'fill', paint: { 'fill-color': '#d97706', 'fill-opacity': 0.3 } },
-          { id: 'reno-l', type: 'line', paint: { 'line-color': '#b45309', 'line-width': 1.4, 'line-dasharray': [2, 1] } }] }]);
+          { id: 'reno-f', type: 'fill', paint: { 'fill-color': K.good, 'fill-opacity': 0.22 } },
+          { id: 'reno-l', type: 'line', paint: { 'line-color': K.good, 'line-width': 1.4, 'line-dasharray': [2, 1] } }] }]);
       });
     } else {
       layerLoaded[k] = Promise.all(LAYERS[3].files.map(loadGJ)).then(function (g) {
-        addAll([{ id: 'tron', data: g[0], layers: [{ id: 'tron-l', type: 'line', layout: { 'line-cap': 'round' }, paint: { 'line-color': D ? '#ff9db0' : '#c2185b', 'line-width': 3.5, 'line-dasharray': [1.5, 1.2] } }] },
-          { id: 'tren', data: g[1], layers: [{ id: 'tren-l', type: 'line', layout: { 'line-cap': 'round' }, paint: { 'line-color': D ? '#ffd166' : '#7a4a00', 'line-width': 3, 'line-dasharray': [4, 2] } }] }]);
+        addAll([{ id: 'tron', data: g[0], layers: [{ id: 'tron-l', type: 'line', layout: { 'line-cap': 'round' }, paint: { 'line-color': K.good, 'line-width': 3.5, 'line-dasharray': [1.5, 1.2] } }] },
+          { id: 'tren', data: g[1], layers: [{ id: 'tren-l', type: 'line', layout: { 'line-cap': 'round' }, paint: { 'line-color': K.ink, 'line-width': 3, 'line-dasharray': [4, 2] } }] }]);
       });
     }
     return layerLoaded[k];
@@ -809,7 +921,7 @@
     }
     return shardCache.get(key).then(function (sh) { return sh[id] || null; });
   }
-  var detailEl = $('#detail'), detailBody = $('#detailBody'), lastFocus = null;
+  var detailEl = $('#detail'), detailBody = $('#detailBody'), lastFocus = null, vizOn = null;
   function openDetail(id) {
     var l = byId.get(id);
     if (!lastFocus || !detailEl.contains(document.activeElement)) lastFocus = document.activeElement;
@@ -820,7 +932,7 @@
     var cc = listEl.querySelector('.card[data-id="' + CSS.escape(id) + '"]'); if (cc) cc.classList.add('current');
     $('#detailBarTitle').textContent = l ? (l.br || '') : '';
     var fb = $('#detailFav'); fb.hidden = !l; fb.setAttribute('data-id', id); setFavBtn(fb, id);
-    destroyMini();
+    destroyMini(); vizOn = null;
     if (!l) {
       detailBody.innerHTML = '<div class="empty"><h2>Esta oferta ya no está activa</h2><p>Puede que se haya vendido o retirado del portal desde la última actualización.</p><button type="button" class="btn btn-primary" data-close>Volver a la lista</button></div>';
     } else {
@@ -830,7 +942,7 @@
       loadDetail(id).then(function (d) {
         if (!current || current.id !== id) return;
         detailBody.innerHTML = headHTML(l, d) + (d ? bodyHTML(l, d) : '<p class="loading">No hay detalle para esta oferta.</p>');
-        if (d) initMini(l, d);
+        if (d) { drawViz(l, d, true); vizOn = { l: l, d: d }; initMini(l, d); }
       }).catch(function () {
         if (!current || current.id !== id) return;
         detailBody.querySelector('.loading').innerHTML = 'No se pudo cargar el detalle. <button type="button" class="btn" data-retry>Reintentar</button>';
@@ -927,11 +1039,8 @@
     // Desglose
     var base = COMP.reduce(function (s, k, i) { return s + k.w * c[i]; }, 0);
     var penSum = l.pen.reduce(function (s, p) { return s + p.pts; }, 0);
-    out += '<section class="sec"><h2>Desglose del puntaje</h2><div class="bars">' + COMP.map(function (k, i) {
-      return '<div class="bar-row"><span>C' + (i + 1) + ' ' + k.k + '<small>' + Math.round(k.w * 100) + '% · ' + k.note + '</small></span>' +
-        '<span class="bar" role="img" aria-label="' + k.k + ': ' + c[i] + ' de 100"><i style="width:' + Math.max(0, Math.min(100, c[i])) + '%"></i></span>' +
-        '<span class="bar-val">' + c[i] + '</span></div>';
-    }).join('') + '</div><div class="formula">Base ponderada <b>' + NF1.format(base) + '</b> − penalizaciones <b>' + penSum + '</b>' +
+    out += '<section class="sec"><h2>Desglose del puntaje</h2><p class="sec-note">Cada componente de 0 a 100 (percentil dentro de Cali). En gris claro, los que no tienen datos y cuentan como 50.</p>' +
+      '<div class="viz-box" data-viz="comp"></div><div class="formula">Base ponderada <b>' + NF1.format(base) + '</b> − penalizaciones <b>' + penSum + '</b>' +
       ' × confianza (0,6 + 0,4 × ' + NF1.format(l.conf == null ? 0 : l.conf) + ') = <b>' + (l.s == null ? 'no ranqueable' : NF1.format(l.s)) + '</b>' +
       '<br>C1 y C2 son percentiles dentro de Cali. La confianza baja con pocos comparables, ubicación aproximada o sin área.</div></section>';
 
@@ -951,6 +1060,7 @@
     // Comparables
     var comps = d.comps || [];
     out += '<section class="sec"><h2>Comparables</h2><p class="sec-note">' + esc(d.comps_info || '') + '</p>' +
+      (comps.filter(function (k) { return k.pm > 0; }).length >= 3 ? '<h3 class="viz-h">Precio/m² de los comparables</h3><div class="viz-box" data-viz="comps"></div>' : '') +
       (comps.length ? '<div class="minimap" id="minimap" role="img" aria-label="Mapa de la oferta y sus comparables"></div>' +
         '<table><thead><tr><th>Comparable</th><th class="r">$/m²</th><th class="r">Área</th><th class="r">Distancia</th></tr></thead><tbody>' +
         comps.map(function (k) {
@@ -961,7 +1071,7 @@
 
     // Historial
     var h = d.history || [];
-    out += '<section class="sec"><h2>Historial de precios</h2>' + (h.length ? '<table><thead><tr><th>Fecha</th><th class="r">Precio</th><th class="r">Cambio</th></tr></thead><tbody>' +
+    out += '<section class="sec"><h2>Historial de precios</h2>' + (h.length > 1 ? '<div class="viz-box" data-viz="hist"></div>' : '') + (h.length ? '<table><thead><tr><th>Fecha</th><th class="r">Precio</th><th class="r">Cambio</th></tr></thead><tbody>' +
       h.map(function (x, i) {
         var ch = i ? x.p / h[i - 1].p - 1 : null;
         return '<tr><td>' + fmtDate(x.d) + (i === 0 ? ' <small class="d-flat">publicada</small>' : '') + '</td><td class="r">' + copFull(x.p) + '</td><td class="r ' + (ch != null && ch < 0 ? 'd-good' : '') + '">' + (ch == null ? '—' : pct(ch, true)) + '</td></tr>';
@@ -1012,10 +1122,10 @@
         return { type: 'Feature', geometry: { type: 'Point', coordinates: [k.lng, k.lat] }, properties: { label: copM1(k.pm) } };
       })) });
       miniMap.addSource('s', { type: 'geojson', data: fc([{ type: 'Feature', geometry: { type: 'Point', coordinates: [l.lng, l.lat] }, properties: { label: copM1(l.pm) + ' esta' } }]) });
-      miniMap.addLayer({ id: 'c', type: 'circle', source: 'c', paint: { 'circle-radius': 5, 'circle-color': '#277f8e', 'circle-stroke-width': 1.5, 'circle-stroke-color': '#fff' } });
+      miniMap.addLayer({ id: 'c', type: 'circle', source: 'c', paint: { 'circle-radius': 5, 'circle-color': K.ink3, 'circle-stroke-width': 1.5, 'circle-stroke-color': K.bg } });
       miniMap.addLayer({ id: 'cl', type: 'symbol', source: 'c', layout: { 'text-field': ['get', 'label'], 'text-size': 10, 'text-offset': [0, 1.1], 'text-font': ['DIN Pro Medium', 'Arial Unicode MS Regular'] },
-        paint: { 'text-color': DARK.matches ? '#e4ebe8' : '#14201b', 'text-halo-color': DARK.matches ? '#0e1412' : '#fff', 'text-halo-width': 1.2 } });
-      miniMap.addLayer({ id: 's', type: 'circle', source: 's', paint: { 'circle-radius': 8, 'circle-color': DARK.matches ? '#e4ebe8' : '#14201b', 'circle-stroke-width': 3, 'circle-stroke-color': DARK.matches ? '#7fc3dd' : '#1d5a74' } });
+        paint: { 'text-color': K.ink, 'text-halo-color': K.bg, 'text-halo-width': 1.2 } });
+      miniMap.addLayer({ id: 's', type: 'circle', source: 's', paint: { 'circle-radius': 8, 'circle-color': K.ink, 'circle-stroke-width': 3, 'circle-stroke-color': K.acc } });
       var b = new mapboxgl.LngLatBounds([l.lng, l.lat], [l.lng, l.lat]);
       comps.forEach(function (k) { b.extend([k.lng, k.lat]); });
       miniMap.resize();

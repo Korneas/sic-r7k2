@@ -64,7 +64,7 @@
     var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
     var NF = new Intl.NumberFormat('es-CO'), NF1 = new Intl.NumberFormat('es-CO', { maximumFractionDigits: 1, minimumFractionDigits: 1 });
     var DARK = window.matchMedia('(prefers-color-scheme: dark)');
-    var NODATA = '#b3bcb8';
+    var NODATA = '#b8b8b8';
     var SEQ = ['#ffffcc', '#a1dab4', '#41b6c4', '#2c7fb8', '#253494'];      // ColorBrewer YlGnBu 5 (apta para daltonismo)
     var DIV = ['#b2182b', '#ef8a62', '#f2f2f2', '#67a9cf', '#2166ac'];      // ColorBrewer RdBu 5 (divergente)
     var pctS = function (x, d) { return (x > 0 ? '+' : x < 0 ? '−' : '') + NF1.format(Math.abs(x) * 100).replace(/,0$/, ',0') + '%'; };
@@ -144,7 +144,10 @@
         if (x == null) return 1; if (y == null) return -1;
         return sortDir * (x - y) || a.name.localeCompare(b.name, 'es');
       });
-      var cell = function (r, k, f) { return r[k] == null ? '<td class="r nodata" aria-label="sin datos">—</td>' : '<td class="r num">' + f(r[k]) + '</td>'; };
+      var cell = function (r, k, f) { return r[k] == null ? '<td class="r nodata" aria-label="sin datos">—</td>' : '<td class="r num">' + f(r[k]) + (k === 'median_m2' ? zbar(r[k]) : '') + '</td>'; };
+      var mx = Math.max.apply(null, rows.map(function (r) { return r.median_m2 || 0; })) || 1;
+      // Barra inline de la mediana $/m² (escala: barrio más caro = barra llena).
+      var zbar = function (v) { var w = Math.max(1, Math.round(40 * v / mx)); return '<svg class="zbar" width="40" height="4" viewBox="0 0 40 4" aria-hidden="true"><rect class="v-track" width="40" height="4" rx="2"/><rect class="v-bar" width="' + w + '" height="4" rx="2"/></svg>'; };
       $('#ztb').innerHTML = list.length ? list.map(function (r) {
         return '<tr data-code="' + esc(r.code) + '"' + (r.code === hotCode ? ' class="hot"' : '') + '><td><a href="index.html#' + (r.agg ? 'comuna=' + r.code.slice(1) : 'barrio=' + encodeURIComponent(r.code)) + '" title="Ver ofertas en ' + esc(r.name) + '">' + esc(r.name) + '</a><br><small class="z-hint">' + (r.agg ? 'Todos los barrios de la comuna' : r.comuna == null ? 'Fuera de las comunas' : 'Comuna ' + esc(r.comuna)) + '</small></td>' +
           cell(r, 'median_m2', MBY.median_m2.fmt) + cell(r, 'trend_12m', MBY.trend_12m.fmt) + cell(r, 'dom', MBY.dom.fmt) + cell(r, 'yield', MBY.yield.fmt) + cell(r, 'n_sale', MBY.n_sale.fmt) + '</tr>';
@@ -202,8 +205,8 @@
           if (ready || !gj) return;
           map.addSource('z', { type: 'geojson', data: gj });
           map.addLayer({ id: 'z-fill', type: 'fill', source: 'z', paint: { 'fill-color': ['get', 'c'], 'fill-opacity': DARK.matches ? 0.8 : 0.75 } });
-          map.addLayer({ id: 'z-line', type: 'line', source: 'z', paint: { 'line-color': DARK.matches ? '#0e1412' : '#ffffff', 'line-width': 0.7, 'line-opacity': 0.8 } });
-          map.addLayer({ id: 'z-hl', type: 'line', source: 'z', filter: ['==', ['get', 'code'], ''], paint: { 'line-color': DARK.matches ? '#e4ebe8' : '#14201b', 'line-width': 2.5 } });
+          map.addLayer({ id: 'z-line', type: 'line', source: 'z', paint: { 'line-color': DARK.matches ? '#111111' : '#ffffff', 'line-width': 0.7, 'line-opacity': 0.8 } });
+          map.addLayer({ id: 'z-hl', type: 'line', source: 'z', filter: ['==', ['get', 'code'], ''], paint: { 'line-color': DARK.matches ? '#ececec' : '#171717', 'line-width': 2.5 } });
           ready = true;
           var bb = new mapboxgl.LngLatBounds(); gj.features.forEach(function (f) { bb.extend(bbox(f.geometry)); });
           map.fitBounds(bb, { padding: 30, duration: 0 });
