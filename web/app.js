@@ -575,7 +575,7 @@
         cooperativeGestures: false, locale: { 'NavigationControl.ZoomIn': 'Acercar', 'NavigationControl.ZoomOut': 'Alejar', 'NavigationControl.ResetBearing': 'Restablecer orientación' }
       });
     } catch (e) { return mapFail('Tu navegador no puede mostrar el mapa (WebGL). La lista sigue funcionando.'); }
-    map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), 'top-right');
+    map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), 'top-left');
     map.on('error', function (e) { if (e && e.error && /401|403|token/i.test(String(e.error.message || e.error.status))) mapFail('El token de Mapbox no es válido para este dominio.'); });
     map.on('load', function () {
       Object.keys(RAMP).forEach(function (k) {
