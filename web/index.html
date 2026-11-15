@@ -29,9 +29,13 @@
     <p class="updated" id="updated"></p>
   </header>
 
-  <nav class="filters" aria-label="Filtros">
+  <div class="toolbar">
+    <button type="button" class="fbtn" id="fBtn" aria-expanded="false" aria-controls="fpanel">
+      <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 5h14M6 10h8M8.5 15h3"/></svg>
+      Filtros<span class="fbtn-n" id="fBtnN" hidden></span>
+    </button>
     <div class="chips" id="chips"></div>
-  </nav>
+  </div>
 
   <main class="explore" id="explore">
     <section class="sheet" id="sheet" aria-label="Resultados">
@@ -51,7 +55,7 @@
         </label>
       </div>
       <div class="list-scroll" id="listScroll">
-        <ol class="list" id="list" tabindex="-1"></ol>
+        <ol class="list" id="list" tabindex="-1"><li class="sk" aria-hidden="true"><i></i><span><i></i><i></i><i></i></span></li><li class="sk" aria-hidden="true"><i></i><span><i></i><i></i><i></i></span></li><li class="sk" aria-hidden="true"><i></i><span><i></i><i></i><i></i></span></li><li class="sk" aria-hidden="true"><i></i><span><i></i><i></i><i></i></span></li><li class="sk" aria-hidden="true"><i></i><span><i></i><i></i><i></i></span></li><li class="sk" aria-hidden="true"><i></i><span><i></i><i></i><i></i></span></li></ol>
         <div class="empty" id="empty" hidden></div>
         <div class="sentinel" id="sentinel" aria-hidden="true"></div>
       </div>
@@ -73,7 +77,7 @@
       </div>
     </div>
 
-    <aside class="detail" id="detail" hidden aria-labelledby="dTitle" tabindex="-1">
+    <aside class="detail" id="detail" inert aria-labelledby="dTitle" tabindex="-1">
       <div class="detail-bar">
         <button class="icon-btn" id="detailClose" type="button" aria-label="Cerrar detalle">
           <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5l10 10M15 5L5 15"/></svg>
@@ -88,7 +92,14 @@
   </main>
 
   <button class="view-toggle" id="viewToggle" type="button">Lista</button>
-  <div class="popover" id="popover" hidden role="dialog" aria-modal="false"></div>
+  <div class="scrim" id="scrim" aria-hidden="true"></div>
+  <section class="fpanel" id="fpanel" inert role="dialog" aria-modal="false" aria-labelledby="fpTitle">
+    <header class="fp-head"><h2 id="fpTitle">Filtros</h2>
+      <button class="icon-btn" type="button" data-act="done" aria-label="Cerrar filtros"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5l10 10M15 5L5 15"/></svg></button></header>
+    <div class="fp-body" id="fpBody"></div>
+    <footer class="fp-foot"><button type="button" class="btn btn-ghost" data-act="clearall">Limpiar todo</button>
+      <button type="button" class="btn btn-primary" data-act="done" id="fpDone">Ver ofertas</button></footer>
+  </section>
   <div class="tip" id="tip" role="tooltip" hidden></div>
 
   <script src="https://api.mapbox.com/mapbox-gl-js/v3.9.4/mapbox-gl.js"></script>
