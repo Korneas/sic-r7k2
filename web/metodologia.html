@@ -25,10 +25,37 @@
   </header>
 
   <main class="prose" id="top">
-    <h1>Cómo se calcula el puntaje</h1>
+    <h1>Cómo funciona</h1>
     <p class="lede">El puntaje (0 a 100) responde una pregunta: <em>¿esta oferta está barata frente a lo que se pide por inmuebles parecidos cerca, y qué tan bien podría salir de ella después?</em> No es un avalúo ni una promesa de ganancia. Sirve para ordenar cientos de ofertas y decidir cuáles vale la pena visitar primero.</p>
+    <p class="toc"><a href="#tarjeta">Leer una tarjeta</a> · <a href="#componentes">Puntaje</a> · <a href="#comparables">Comparables</a> · <a href="#upside">Upside</a> · <a href="#penalizaciones">Penalizaciones</a> · <a href="#glosario">Glosario</a></p>
 
     <div class="banner" id="runBanner" role="alert" hidden></div>
+
+    <h2 id="tarjeta">Cómo leer una tarjeta</h2>
+    <p>Cada oferta de la lista resume en una tarjeta lo necesario para decidir si vale la pena abrirla. Ejemplo (datos ilustrativos):</p>
+    <ul class="card-demo" aria-label="Tarjeta de ejemplo">
+      <li class="card"><div class="card-link">
+        <div class="card-photo"><div class="no-photo">Foto</div><span class="rank">1</span><i class="ann" aria-hidden="true">1</i></div>
+        <div class="card-body">
+          <div class="card-row1"><div><div class="price">$ 285.000.000 <i class="ann" aria-hidden="true">2</i></div>
+            <div class="pm">Apto · $3,6M/m² <svg class="viz micro" width="56" height="14" viewBox="0 0 56 14" aria-hidden="true"><line class="v-rail" x1="3" x2="53" y1="7" y2="7"/><line class="v-tick" x1="28" x2="28" y1="2" y2="12"/><line class="v-good-s" x1="28" x2="15" y1="7" y2="7"/><circle class="v-good v-ring" cx="15" cy="7" r="3.5"/></svg><i class="ann" aria-hidden="true">3</i></div></div>
+            <span class="score s3"><b>78</b>Muy bueno</span><i class="ann" aria-hidden="true">4</i></div>
+          <div class="deltas"><span class="dchip">−22% vs zona</span><span class="dchip">upside +35%</span><i class="ann" aria-hidden="true">5</i></div>
+          <div class="br">San Fernando <i class="ann" aria-hidden="true">6</i></div>
+          <div class="meta"><span>E4</span><span>78 m²</span><span>3 hab</span><span>2 baños</span><span>1 parq</span></div>
+          <div class="badges"><span class="tag tag-rebaja">Rebaja −5%</span><span class="tag tag-remodelar">🔨 Para remodelar</span><span class="pen">−12 Inundable</span><i class="ann" aria-hidden="true">7</i></div>
+        </div></div></li>
+    </ul>
+    <ol class="card-key">
+      <li><strong>Posición</strong> en el orden actual de la lista (por defecto, por puntaje). El corazón guarda la oferta en favoritos.</li>
+      <li><strong>Precio pedido</strong> en el portal. Es precio de oferta, no de cierre.</li>
+      <li><strong>Tipo y precio por m²</strong>. El riel muestra dónde cae frente al precio esperado por m²: el centro es «igual al esperado», a la izquierda (verde) más barato, a la derecha más caro, hasta ±40%.</li>
+      <li><strong>Puntaje</strong> de 0 a 100 y su nivel: Excelente (85+), Muy bueno (70+), Bueno (55+), Regular (40+), Bajo. «—  No es oportunidad» si no se puede ranquear.</li>
+      <li><strong>Descuento vs zona</strong>: cuánto más barato está el m² frente a los <a href="#comparables">comparables</a>. <strong>Upside</strong>: cuánto podría subir el m² hasta el <a href="#upside">ARV</a>.</li>
+      <li><strong>Barrio</strong> y datos básicos: estrato (E4), área construida, habitaciones, baños y parqueaderos.</li>
+      <li><strong>Etiquetas</strong> (informativas, no restan) y <strong>penalizaciones</strong> (con «−n», restan puntos; pasa el cursor o toca para ver la razón).</li>
+    </ol>
+    <p>Al abrir la tarjeta, la ficha muestra el desglose del puntaje en barras, la tira de comparables (cada punto es una oferta vecina; la marca resaltada es esta), el historial de precio, amenidades cercanas, riesgos y los enlaces a los portales.</p>
 
     <h2 id="componentes">Los 5 componentes</h2>
     <p>Cada componente se convierte primero en un <strong>percentil de 0 a 100 dentro de Cali</strong> (100 = mejor que casi todas las ofertas), para que ninguna escala domine a las demás. Después se suman con estos pesos:</p>
@@ -115,6 +142,41 @@
       <li>OpenStreetMap tiene huecos; las capas oficiales (POT, estrato, homicidios) se actualizan mensual o anualmente y no reemplazan una visita ni un estudio de títulos.</li>
       <li>No incluye costos de remodelación, notariales ni impuestos. No es asesoría financiera ni legal.</li>
     </ul>
+
+
+    <h2 id="glosario">Glosario</h2>
+    <dl class="gloss">
+      <dt>$/m² (precio por m²)</dt><dd>Precio pedido ÷ área construida. Es la medida para comparar inmuebles de distinto tamaño.</dd>
+      <dt>Comparables (comps)</dt><dd>Ofertas vecinas parecidas (mismo tipo, área ±30%, estrato ±1) usadas para estimar el precio esperado.</dd>
+      <dt>Precio esperado por m²</dt><dd>Mediana ponderada del $/m² de los comparables: lo que «debería» pedirse por este inmueble.</dd>
+      <dt>Mediana</dt><dd>El valor del medio cuando se ordenan los datos. A diferencia del promedio, no la mueven unos pocos precios exagerados.</dd>
+      <dt>Descuento (vs zona)</dt><dd>1 − $/m² ÷ $/m² esperado. Positivo = más barato que sus comparables.</dd>
+      <dt>ARV (After Repair Value)</dt><dd>Valor después de arreglar: el $/m² del percentil 75 de los comparables en buen estado.</dd>
+      <dt>Upside</dt><dd>ARV ÷ $/m² − 1: cuánto podría subir el m² si quedara como los mejores de su zona. Tope «≥ +80%».</dd>
+      <dt>Regla del 70%</dt><dd>Referencia de flip: no pagar más del 70% del ARV. Aquí no descuenta costos de obra.</dd>
+      <dt>Percentil (P75, P90…)</dt><dd>Posición dentro de un grupo: P75 = mayor que el 75% de los valores.</dd>
+      <dt>C1–C5</dt><dd>Los cinco componentes del puntaje: descuento, reventa (upside), valorización, amenidades y liquidez.</dd>
+      <dt>Confianza</dt><dd>Factor de 0,6 a 1 según cuántos comparables hay y si la ubicación es exacta.</dd>
+      <dt>Liquidez / DOM</dt><dd>Qué tan rápido se vende en la zona. DOM (days on market) son los días que una oferta pasa publicada.</dd>
+      <dt>Absorción</dt><dd>Ofertas retiradas en 30 días ÷ ofertas activas: cuánto del inventario sale del mercado por mes.</dd>
+      <dt>Yield (rentabilidad bruta)</dt><dd>Arriendo anual ÷ precio de venta, calculado por zona con los arriendos publicados.</dd>
+      <dt>Tendencia 12m</dt><dd>Cambio del $/m² mediano del barrio en los últimos 12 meses.</dd>
+      <dt>E (estrato)</dt><dd>Estrato socioeconómico del predio (1 a 6). Se muestran desde el 2.</dd>
+      <dt>Comuna / barrio</dt><dd>División administrativa de Cali (22 comunas) y sus barrios, según IDESC.</dd>
+      <dt>Ubicación exacta / aproximada</dt><dd>Exacta: coordenada del portal. Aproximada: solo se conoce el barrio; baja la confianza.</dd>
+      <dt>Grupo / duplicado</dt><dd>El mismo inmueble publicado varias veces o en ambos portales se agrupa en una sola oferta.</dd>
+      <dt>Nueva</dt><dd>Vista por primera vez hace menos de 48 h.</dd>
+      <dt>Rebaja</dt><dd>El precio bajó frente al primero registrado; el porcentaje es el cambio.</dd>
+      <dt>Para remodelar</dt><dd>El aviso o la antigüedad sugieren obra. Informativa.</dd>
+      <dt>Uso mixto / renta</dt><dd>Casa con locales o pisos independientes: es otro producto y resta 10.</dd>
+      <dt>Dato sospechoso</dt><dd>Precio o área irreales (p. ej. arriendo publicado como venta). No se ranquea.</dd>
+      <dt>MIO</dt><dd>Sistema de transporte masivo de Cali (troncales y paradas).</dd>
+      <dt>POT</dt><dd>Plan de Ordenamiento Territorial: de ahí salen las amenazas de inundación y ladera.</dd>
+      <dt>IDESC</dt><dd>Infraestructura de Datos Espaciales de Cali: fuente oficial de barrios, estratos, riesgos y proyectos.</dd>
+      <dt>OSM</dt><dd>OpenStreetMap: fuente de amenidades (comercio, parques, salud, colegios).</dd>
+      <dt>FR / M2</dt><dd>Finca Raíz y Metrocuadrado, los portales de origen.</dd>
+      <dt>COP / $M</dt><dd>Pesos colombianos; $3,6M = 3,6 millones.</dd>
+    </dl>
 
     <h2 id="fuentes">Fuentes</h2>
     <h3>Ofertas</h3>

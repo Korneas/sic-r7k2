@@ -695,3 +695,18 @@ body.zonas { display: grid; grid-template-rows: auto auto minmax(0, 1fr); height
 .stack-pop li .num { font-weight: 700; min-width: 56px; }
 .stack-pop li .score { margin-left: auto; }
 .mapboxgl-popup-content { color: var(--ink); background: var(--surface); }
+
+/* Metodología: tarjeta de ejemplo y glosario */
+.prose .toc { font-size: 14px; }
+.card-demo { list-style: none; padding: 0; margin: 12px 0; max-width: 420px; pointer-events: none; }
+.card-demo .card-link { position: relative; }
+.ann { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); font: 700 11px/1 var(--font); font-style: normal; vertical-align: middle; margin-left: 4px; flex: none; }
+.card-photo .ann { position: absolute; left: 6px; bottom: 6px; margin: 0; }
+.card-key li { margin: 4px 0; }
+.card-key li::marker { color: var(--accent); font-weight: 700; }
+.gloss { display: grid; grid-template-columns: minmax(140px, 220px) 1fr; gap: 6px 16px; margin: 12px 0; font-size: 15px; line-height: 1.5; }
+.gloss dt { font-weight: 650; color: var(--ink); }
+.gloss dd { margin: 0; color: var(--ink-2); }
+@media (max-width: 560px) { .gloss { grid-template-columns: 1fr; gap: 0; } .gloss dd { margin-bottom: 10px; } }
+.card-row1 > .ann { position: absolute; right: -7px; top: -7px; margin: 0; }
+@media (max-width: 480px) { .card-demo .card-link { grid-template-columns: 72px minmax(0, 1fr); } .card-demo .card-photo { width: 72px; } }
