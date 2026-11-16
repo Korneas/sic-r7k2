@@ -8,6 +8,7 @@ los reportan; y
 Una retirada solo empata con ofertas que aparecieron a lo sumo 60 días después de su retiro (republicadas).
 Grupos por enlace completo (todos los miembros empatan entre sí, para no encadenar), máximo MAX_GROUP miembros
 y máximo MAX_PER_SOURCE activas por portal; group_id = miembro con first_seen más antiguo (empate: id menor).
+Las publicaciones manuales (source "manual") no se agrupan: cada una es su propio grupo.
 Candidatos: cubetas (operación, tipo, habitaciones) ordenadas por precio y ventana de ±5% → O(n·w), sin O(n²).
 """
 import math
@@ -215,7 +216,7 @@ def group_rows(rows, ph=None, amb=None):
         r["_hood"] = "" if h in NO_HOOD else h
         r["_first"], r["_removed"] = _ts(r["first_seen"]), _ts(r["removed_at"])
         r["_ph"] = ph.get(r["id"], ())
-        if r["price"] and r["operation"] and r["property_type"]:
+        if r["price"] and r["operation"] and r["property_type"] and r["source"] != "manual":  # manual: grupo propio
             buckets[(r["operation"], r["property_type"], r["bedrooms"])].append(r)
         else:
             out[r["id"]] = r["id"]

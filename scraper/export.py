@@ -15,7 +15,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_OUT = ROOT / "web" / "data"
 LAYERS = ROOT / "data" / "layers"
-PREFIX = {"fincaraiz": "fr", "metrocuadrado": "m2", "fr": "fr", "m2": "m2"}
+PREFIX = {"fincaraiz": "fr", "metrocuadrado": "m2", "manual": "mn", "fr": "fr", "m2": "m2"}
 
 
 def _j(s, default=None):
@@ -236,6 +236,8 @@ def _build(conn, cfg, out, dedupe):
             "amen": [a for a in (_j(ar, []) or []) if isinstance(a, dict)],
             "risks": [{"k": x.get("k"), "why": x.get("why")} for x in (_j(g["risks"], []) if g is not None else []) or [] if isinstance(x, dict)],
             "projects": (_j(g["projects"], []) if g is not None else []) or [],
+            **({"by": r["created_by"]} if r["created_by"] else {}),
+            **({"by_upd": r["updated_by"]} if r["updated_by"] and r["updated_by"] != r["created_by"] else {}),
             "zone": ({"median_m2": z["median_m2"], "trend_12m": z["trend_12m"], "dom": z["dom"], "yield": z["yield"]} if z else None),
         }
 

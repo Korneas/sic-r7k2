@@ -54,7 +54,7 @@
   ];
   var PEN_SHORT = { inund_nm: 'Inundación', inund: 'Inundable', masa: 'Ladera', homic: 'Homicidios', homic75: 'Homicidios', mejora: 'Mejoramiento', ruido: 'Ruido', legal: 'Legal', aprox: 'Ubic. aprox.' };
   var HIDE_TAGS = { no_oportunidad: 1 };
-  var TAGS = { nueva: 'Nueva', rebaja: 'Rebaja', remodelar: '🔨 Para remodelar', legal: '⚖️ Legal', sospechoso: 'Dato sospechoso', mixto: 'Uso mixto/renta' };
+  var TAGS = { nueva: 'Nueva', rebaja: 'Rebaja', remodelar: '🔨 Para remodelar', legal: '⚖️ Legal', sospechoso: 'Dato sospechoso', mixto: 'Uso mixto/renta', manual: 'Manual' };
   var UP_CAP = 0.8; // config score.arv.upside_cap: el upside se guarda con tope
   function upTxt(x) { return (x >= UP_CAP - 0.0005 ? '≥ ' : '') + pct(x, true); }
   var AMEN = { mio: 'MIO troncal', mio_stop: 'Parada MIO', mall: 'Centros comerciales', super: 'Supermercados', park: 'Parques', health: 'Clínicas y hospitales', edu: 'Colegios y universidades', food: 'Restaurantes y cafés', bank: 'Bancos y droguerías', gym: 'Deporte' };
@@ -230,6 +230,7 @@
     { k: 'rebaja', label: 'Con rebaja', type: 'toggle' },
     { k: 'nueva', label: 'Nueva < 48 h', type: 'toggle' },
     { k: 'nopen', label: 'Sin penalizaciones', type: 'toggle' },
+    { k: 'manual', label: 'Solo publicadas manualmente', type: 'toggle' },
     { k: 'favs', label: '❤ Solo favoritos', type: 'toggle' }
   ];
   var FBY = {}; FILTERS.forEach(function (f) { if (f.k) FBY[f.k] = f; });
@@ -271,6 +272,7 @@
         if (k === 'remodelar') return function (l) { return l._tags.remodelar; };
         if (k === 'rebaja') return function (l) { return l._tags.rebaja; };
         if (k === 'nueva') return function (l) { return l._tags.nueva; };
+        if (k === 'manual') return function (l) { return l._tags.manual; };
         if (k === 'nopen') return function (l) { return l._npen === 0; };
         if (k === 'favs') return function (l) { return favs.has(l.id); };
     }
@@ -995,7 +997,7 @@
         return '<img src="' + esc(u) + '" alt="Foto ' + (i + 1) + ' de ' + photos.length + '" loading="' + (i < 2 ? 'eager' : 'lazy') + '" decoding="async" referrerpolicy="no-referrer" onerror="this.remove()">';
       }).join('') + '</div><p class="gallery-count">' + photos.length + ' ' + (photos.length === 1 ? 'foto' : 'fotos') + (photos.length > 1 ? ' · desliza para ver más' : '') + '</p>'
       : '<div class="gallery"><div class="no-photo">El anuncio no tiene fotos</div></div>';
-    var title = d ? d.title : (l.t === 'c' ? 'Casa' : 'Apartamento') + ' en venta';
+    var title = (d && d.title) || (l.t === 'c' ? 'Casa' : 'Apartamento') + ' en venta';
     var sub = ['<span class="br">' + esc(l.br || 'Barrio sin dato') + '</span>', l.cm ? 'Comuna ' + esc(l.cm) : 'Fuera de las comunas', l.e ? 'Estrato ' + esc(l.e) : null,
       l.a ? NF.format(l.a) + ' m²' : 'sin área', l.b != null ? l.b + ' hab' : null, l.ba != null ? l.ba + (l.ba === 1 ? ' baño' : ' baños') : null,
       (l.pk || 0) + ' parq', l.age != null ? l.age + ' años' : null, d && d.floor ? 'piso ' + d.floor : null,
@@ -1011,7 +1013,8 @@
       (l.d != null ? '<span class="dchip' + (l.d > 0 ? '' : ' flat') + '">' + pct(-l.d, true) + ' vs zona</span>' : '') +
       (l.up != null && l.up > 0 ? '<span class="dchip">upside ' + upTxt(l.up) + '</span>' : '') + '</div>' +
       '<div class="d-sub">' + sub + '</div>' +
-      (tags ? '<div class="badges" style="margin-top:8px">' + tags + '</div>' : '') + links + '</div>';
+      (tags ? '<div class="badges" style="margin-top:8px">' + tags + '</div>' : '') +
+      (d && d.by ? '<p class="d-by">Publicada por ' + esc(d.by) + (d.by_upd ? ' · editada por ' + esc(d.by_upd) : '') + '</p>' : '') + links + '</div>';
   }
 
   function bodyHTML(l, d) {
@@ -1194,6 +1197,7 @@
   function prep(l, i) {
     l._n = i;
     var t = {}; l.tags = l.tags || []; l.pen = l.pen || [];
+    if ((l.src || []).indexOf('mn') >= 0) l.tags.unshift('manual');  // publicada a mano (web/publicar.html)
     l.tags.forEach(function (x) { t[x] = true; });
     l._tags = t; l._npen = nPen(l);
     if (l.br == null) l.br = '';

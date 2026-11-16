@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex, nofollow, noarchive">
+  <meta name="color-scheme" content="light dark">
+  <title>sic · Publicar</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&display=swap">
+  <link rel="stylesheet" href="https://api.mapbox.com/mapbox-gl-js/v3.9.4/mapbox-gl.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="doc">
+  <header class="top">
+    <a class="brand" href="./" aria-label="sic, inicio">
+      <svg class="brand-mark" viewBox="0 0 20 20" aria-hidden="true"><rect x="1" y="11" width="4" height="8" rx="1"/><rect x="8" y="6" width="4" height="13" rx="1"/><rect x="15" y="1" width="4" height="18" rx="1"/></svg>
+      <span class="brand-name">sic</span>
+      <span class="brand-sub">Oportunidades de compra en Cali</span>
+    </a>
+    <nav class="nav" aria-label="Secciones">
+      <a href="./">Explorar</a><a href="zonas.html">Zonas</a><a href="metodologia.html">Metodología</a><a href="publicar.html" aria-current="page">Publicar</a>
+    </nav>
+  </header>
+
+  <main class="prose pub">
+    <h1>Publicar a mano</h1>
+    <p class="lede">Agrega un inmueble que no está en los portales. Se puntúa igual que los demás y aparece con la etiqueta <span class="tag tag-manual">Manual</span>.</p>
+
+
+    <div id="app">
+      <div class="pub-msg" id="msg" role="status" aria-live="polite" hidden></div>
+
+      <form class="pub-card" id="form" novalidate>
+        <h2 id="formTitle">Nueva publicación</h2>
+        <fieldset>
+          <legend>Requeridos</legend>
+          <div class="pub-grid">
+            <label class="field">Tipo
+              <select name="property_type"><option value="">Elige…</option><option value="apartamento">Apartamento</option><option value="casa">Casa</option></select>
+            </label>
+            <label class="field">Precio de venta (COP)
+              <input name="price" type="number" inputmode="numeric" min="10000000" step="1" placeholder="300000000">
+              <small class="pub-hint" id="priceFmt"></small>
+            </label>
+            <label class="field">Área construida (m²)<input name="area_m2" type="number" inputmode="decimal" step="any" min="20"></label>
+            <label class="field">Antigüedad (años)<input name="age_years" type="number" inputmode="decimal" step="any" min="0"></label>
+            <label class="field">Habitaciones<input name="bedrooms" type="number" inputmode="numeric" step="1" min="0"></label>
+            <label class="field">Baños<input name="bathrooms" type="number" inputmode="numeric" step="1" min="0"></label>
+          </div>
+          <div class="field pub-loc">Ubicación: haz clic en el mapa o arrastra el pin
+            <div class="pub-search">
+              <input type="search" id="addr" placeholder="Buscar dirección en Cali" aria-label="Buscar dirección en Cali">
+              <button class="btn" type="button" id="addrBtn">Buscar</button>
+            </div>
+            <div id="pmap" class="pub-map" role="region" aria-label="Mapa para ubicar el inmueble"></div>
+            <div class="pub-grid">
+              <label class="field">Latitud<input name="lat" type="number" step="any" inputmode="decimal"></label>
+              <label class="field">Longitud<input name="lng" type="number" step="any" inputmode="decimal"></label>
+            </div>
+          </div>
+        </fieldset>
+        <fieldset>
+          <legend>Opcionales</legend>
+          <div class="pub-grid">
+            <label class="field pub-wide">Título<input name="title" type="text" maxlength="200"></label>
+            <label class="field">Barrio (el oficial sale del pin)<input name="neighborhood" type="text" maxlength="120"></label>
+            <label class="field">Estrato (el oficial sale del pin)<input name="stratum" type="number" step="1" min="1" max="6"></label>
+            <label class="field">Parqueaderos<input name="parking" type="number" step="1" min="0"></label>
+            <label class="field">Piso<input name="floor" type="number" step="1"></label>
+            <label class="field">Administración (COP/mes)<input name="admin_fee" type="number" step="1" min="0"></label>
+            <label class="field">Área de lote (m²)<input name="area_lot_m2" type="number" step="any" min="1"></label>
+            <label class="field pub-wide">URL de origen<input name="url" type="url" placeholder="https://…"></label>
+            <label class="field pub-wide">URLs de fotos (una por línea)<textarea name="photos" rows="3"></textarea></label>
+            <label class="field pub-wide">Descripción<textarea name="description" rows="4" maxlength="10000"></textarea></label>
+            <label class="field pub-wide">Notas privadas: solo las ves tú, nunca se publican<textarea name="notes" rows="3" maxlength="5000"></textarea></label>
+          </div>
+        </fieldset>
+        <div class="pub-err" id="err" role="alert" hidden></div>
+        <div class="pub-actions">
+          <button class="btn btn-primary" type="submit" id="save">Guardar</button>
+          <button class="btn btn-ghost" type="button" id="cancel" hidden>Cancelar edición</button>
+        </div>
+      </form>
+
+      <h2>Mis publicaciones</h2>
+      <ul class="pub-list" id="list"><li class="pub-hint">Cargando…</li></ul>
+    </div>
+  </main>
+
+  <script src="https://api.mapbox.com/mapbox-gl-js/v3.9.4/mapbox-gl.js"></script>
+  <script src="config.js"></script>
+  <script>
+  (function () {
+    'use strict';
+    var $ = function (s) { return document.querySelector(s); };
+    var form = $('#form'), editing = null, items = [], map = null, marker = null;
+    var NF = new Intl.NumberFormat('es-CO');
+    function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return '&#' + c.charCodeAt(0) + ';'; }); }
+
+    // Mismas reglas que api/manual.js: [campo, entero, mín, máx, etiqueta]
+    var REQ = [['price', 1, 10e6, 50e9, 'Precio'], ['area_m2', 0, 20, 5000, 'Área construida'],
+      ['lat', 0, 3.28, 3.56, 'Ubicación (latitud)'], ['lng', 0, -76.62, -76.42, 'Ubicación (longitud)'],
+      ['age_years', 0, 0, 150, 'Antigüedad'], ['bedrooms', 1, 0, 30, 'Habitaciones'], ['bathrooms', 1, 0, 30, 'Baños']];
+    var OPT = [['stratum', 1, 1, 6, 'Estrato'], ['parking', 1, 0, 30, 'Parqueaderos'], ['floor', 1, -5, 100, 'Piso'],
+      ['admin_fee', 1, 0, 50e6, 'Administración'], ['area_lot_m2', 0, 1, 1e6, 'Área de lote']];
+    var isUrl = function (u) { return /^https?:\/\/\S+$/i.test(u); };
+
+    function collect() {
+      var f = form.elements, b = { property_type: f.property_type.value }, errs = [], bad = [];
+      if (!b.property_type) { errs.push('Tipo: elige apartamento o casa.'); bad.push('property_type'); }
+      REQ.concat(OPT).forEach(function (r) {
+        var raw = f[r[0]].value.trim(), opt = OPT.indexOf(r) >= 0;
+        if (raw === '') { b[r[0]] = null; if (!opt) { errs.push(r[4] + ': es obligatorio.'); bad.push(r[0]); } return; }
+        var v = Number(raw);
+        if (!isFinite(v) || (r[1] && v % 1)) { errs.push(r[4] + ': debe ser un número' + (r[1] ? ' entero' : '') + '.'); bad.push(r[0]); }
+        else if (v < r[2] || v > r[3]) { errs.push(r[4] + ': debe estar entre ' + NF.format(r[2]) + ' y ' + NF.format(r[3]) + '.'); bad.push(r[0]); }
+        b[r[0]] = v;
+      });
+      ['title', 'neighborhood', 'description', 'notes', 'url'].forEach(function (k) { b[k] = f[k].value.trim() || null; });
+      if (b.url && !isUrl(b.url)) { errs.push('URL de origen: debe empezar por http:// o https://.'); bad.push('url'); }
+      b.photos = f.photos.value.split('\n').map(function (s) { return s.trim(); }).filter(Boolean);
+      if (b.photos.length > 50 || !b.photos.every(isUrl)) { errs.push('Fotos: hasta 50 URLs, cada una con http:// o https://.'); bad.push('photos'); }
+      b.status = editing ? editing.status : 'active';
+      if (editing) b.id = editing.id;
+      Array.prototype.forEach.call(form.querySelectorAll('[aria-invalid]'), function (el) { el.removeAttribute('aria-invalid'); });
+      bad.forEach(function (k) { f[k].setAttribute('aria-invalid', 'true'); });
+      if (bad.indexOf('lat') >= 0 || bad.indexOf('lng') >= 0) $('#pmap').setAttribute('aria-invalid', 'true');
+      return { body: b, errs: errs };
+    }
+
+    function showErr(list, plain) {
+      var box = $('#err');
+      box.hidden = !list.length;
+      box.innerHTML = plain ? esc(list[0]) : list.length ? '<b>Revisa estos campos:</b><ul>' + list.map(function (e) { return '<li>' + esc(e) + '</li>'; }).join('') + '</ul>' : '';
+      if (list.length) box.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+    function showMsg(t) { var m = $('#msg'); m.hidden = !t; m.textContent = t || ''; m.classList.remove('in'); void m.offsetWidth; if (t) m.classList.add('in'); }
+
+    function api(method, body, q) {
+      return fetch('/api/manual' + (q || ''), { method: method, headers: { 'content-type': 'application/json' },
+        body: body ? JSON.stringify(body) : undefined })
+        .catch(function () { throw new Error('No se pudo conectar con el servidor. Revisa tu conexión e intenta de nuevo.'); })
+        .then(function (r) {
+          if (r.status === 401) throw new Error('No autorizado: recarga la página y entra con la contraseña del sitio.');
+          return r.json().catch(function () { return {}; }).then(function (j) {
+            if (!r.ok) throw new Error(j.error || 'El servidor respondió con un error (' + r.status + '). Intenta de nuevo.');
+            return j;
+          });
+        });
+    }
+
+    function load() {
+      return api('GET').then(function (list) { items = list; renderList(); })
+        .catch(function (e) { $('#list').innerHTML = '<li class="pub-err">' + esc(e.message) + '</li>'; });
+    }
+    var ST = { active: 'Activa', sold: 'Vendida', removed: 'Retirada' };
+    function renderList() {
+      $('#list').innerHTML = items.length ? items.slice().reverse().map(function (it) {
+        return '<li class="pub-item" data-id="' + esc(it.id) + '"><div><b>' + esc(it.title || (it.property_type === 'casa' ? 'Casa' : 'Apartamento')) + '</b> · $ ' + NF.format(it.price) +
+          ' · ' + NF.format(it.area_m2) + ' m²' + (it.created_by ? ' · por ' + esc(it.created_by) + (it.updated_by && it.updated_by !== it.created_by ? ' (editada por ' + esc(it.updated_by) + ')' : '') : '') + ' <span class="tag' + (it.status === 'active' ? ' tag-manual' : '') + '">' + ST[it.status] + '</span>' +
+          (it.notes ? '<p class="pub-note">' + esc(it.notes) + '</p>' : '') + '</div><div class="pub-acts">' +
+          '<button class="btn" data-a="edit">Editar</button>' +
+          (it.status !== 'sold' ? '<button class="btn" data-a="sold">Marcar vendida</button>' : '') +
+          (it.status !== 'removed' ? '<button class="btn" data-a="removed">Retirar</button>' : '') +
+          (it.status !== 'active' ? '<button class="btn" data-a="active">Reactivar</button>' : '') +
+          '<button class="btn btn-ghost pub-del" data-a="del">Borrar</button></div></li>';
+      }).join('') : '<li class="pub-hint">Todavía no hay publicaciones manuales.</li>';
+    }
+    var SAVED = 'Guardado. El puntaje aparecerá en unos 3 minutos.';
+    $('#list').addEventListener('click', function (e) {
+      var b = e.target.closest('button[data-a]'); if (!b) return;
+      var it = items.filter(function (x) { return x.id === b.closest('li').dataset.id; })[0], a = b.dataset.a;
+      if (a === 'edit') return fill(it);
+      var p = a === 'del'
+        ? (confirm('¿Borrar esta publicación para siempre? No se puede deshacer.') ? api('DELETE', null, '?id=' + encodeURIComponent(it.id)) : null)
+        : api('PUT', Object.assign({}, it, { status: a }));
+      if (!p) return;
+      b.disabled = true;
+      p.then(function () { showMsg(a === 'del' ? 'Borrada. Desaparecerá del mapa en unos 3 minutos.' : SAVED); if (editing && editing.id === it.id) reset(); return load(); })
+        .catch(function (e) { showMsg(e.message); b.disabled = false; });
+    });
+
+    function fill(it) {
+      editing = it; reset(true);
+      Array.prototype.forEach.call(form.elements, function (el) {
+        if (!el.name) return;
+        var v = it[el.name];
+        el.value = el.name === 'photos' ? (v || []).join('\n') : v == null ? '' : v;
+      });
+      $('#formTitle').textContent = 'Editar publicación'; $('#cancel').hidden = false;
+      setPin(it.lng, it.lat, true); fmtPrice();
+      form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    function reset(keep) {
+      if (!keep) editing = null;
+      form.reset(); showErr([]); fmtPrice();
+      Array.prototype.forEach.call(form.querySelectorAll('[aria-invalid]'), function (el) { el.removeAttribute('aria-invalid'); });
+      $('#formTitle').textContent = 'Nueva publicación'; $('#cancel').hidden = true;
+      if (marker) { marker.remove(); marker = null; }
+    }
+    $('#cancel').addEventListener('click', function () { reset(); });
+
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var c = collect(); showErr(c.errs); showMsg('');
+      if (c.errs.length) return;
+      var btn = $('#save'); btn.disabled = true; btn.textContent = 'Guardando…';
+      api(editing ? 'PUT' : 'POST', c.body)
+        .then(function () { reset(); showMsg(SAVED); window.scrollTo({ top: 0, behavior: 'smooth' }); return load(); })
+        .catch(function (e) { showErr([e.message], true); })
+        .then(function () { btn.disabled = false; btn.textContent = 'Guardar'; });
+    });
+
+    function fmtPrice() { var v = +form.elements.price.value; $('#priceFmt').textContent = v ? '$ ' + NF.format(v) : ''; }
+    form.elements.price.addEventListener('input', fmtPrice);
+
+    // ---------- mapa ----------
+    function setPin(lng, lat, fly) {
+      form.elements.lat.value = (+lat).toFixed(6); form.elements.lng.value = (+lng).toFixed(6);
+      $('#pmap').removeAttribute('aria-invalid');
+      if (!map) return;
+      if (!marker) {
+        marker = new mapboxgl.Marker({ draggable: true }).setLngLat([lng, lat]).addTo(map);
+        marker.on('dragend', function () { var p = marker.getLngLat(); setPin(p.lng, p.lat); });
+      } else marker.setLngLat([lng, lat]);
+      if (fly) map.easeTo({ center: [lng, lat], zoom: Math.max(map.getZoom(), 15), duration: 250 });
+    }
+    function syncFromInputs() { var la = +form.elements.lat.value, ln = +form.elements.lng.value; if (la && ln) setPin(ln, la, true); }
+    form.elements.lat.addEventListener('change', syncFromInputs);
+    form.elements.lng.addEventListener('change', syncFromInputs);
+    function initMap() {
+      if (map || !window.mapboxgl || !window.MAPBOX_TOKEN) { if (!window.MAPBOX_TOKEN) $('#pmap').textContent = 'Mapa no disponible: escribe latitud y longitud.'; return; }
+      mapboxgl.accessToken = window.MAPBOX_TOKEN;
+      var dark = matchMedia('(prefers-color-scheme: dark)').matches;
+      try {
+        map = new mapboxgl.Map({ container: 'pmap', style: 'mapbox://styles/mapbox/' + (dark ? 'dark' : 'light') + '-v11', center: [-76.53, 3.42], zoom: 11.5 });
+      } catch (e) { $('#pmap').textContent = 'No se pudo cargar el mapa: escribe latitud y longitud.'; return; }
+      map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), 'top-left');
+      map.on('click', function (e) { setPin(e.lngLat.lng, e.lngLat.lat); });
+    }
+    function geocode() {
+      var q = $('#addr').value.trim(); if (!q || !window.MAPBOX_TOKEN) return;
+      fetch('https://api.mapbox.com/geocoding/v5/mapbox.places/' + encodeURIComponent(q + ', Cali') + '.json?country=co&language=es&limit=1' +
+        '&bbox=-76.62,3.28,-76.42,3.56&proximity=-76.53,3.42&access_token=' + window.MAPBOX_TOKEN)
+        .then(function (r) { return r.json(); })
+        .then(function (j) { var f = j.features && j.features[0]; if (!f) throw 0; setPin(f.center[0], f.center[1], true); })
+        .catch(function () { showErr(['No encontramos esa dirección en Cali. Ubica el pin a mano en el mapa.'], true); });
+    }
+    $('#addrBtn').addEventListener('click', geocode);
+    $('#addr').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); geocode(); } });
+
+    initMap(); load();
+  })();
+  </script>
+</body>
+</html>

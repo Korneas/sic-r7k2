@@ -6,7 +6,7 @@ import unicodedata
 from collections import defaultdict
 
 DB_PATH = os.environ.get("SIC_DB", "data/sic.db")
-PREFIX = {"fincaraiz": "fr", "metrocuadrado": "m2"}
+PREFIX = {"fincaraiz": "fr", "metrocuadrado": "m2", "manual": "mn"}
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS listing (
@@ -57,10 +57,12 @@ FIELDS = {"source": "source", "source_id": "source_id", "url": "url", "operation
           "price": "price", "admin_fee": "admin_fee", "area_m2": "area_m2", "area_lot_m2": "area_lot_m2",
           "bedrooms": "bedrooms", "bathrooms": "bathrooms", "parking": "parking", "floor": "floor",
           "age_years": "age_years", "stratum": "stratum_portal", "lat": "lat", "lng": "lng",
-          "neighborhood": "neighborhood_portal"}
+          "neighborhood": "neighborhood_portal", "created_by": "created_by", "updated_by": "updated_by"}
 
 
 # columnas agregadas a listing_geo después del esquema inicial (las llena scraper/geo.py)
+# columnas agregadas a listing después del esquema inicial (autor de las publicaciones manuales)
+LISTING_EXTRA = {"created_by": "TEXT", "updated_by": "TEXT"}
 GEO_EXTRA = {"lat": "REAL", "lng": "REAL", "amen_score": "REAL", "proj_score": "REAL", "amen_top": "TEXT", "geo_note": "TEXT"}
 
 
@@ -75,6 +77,10 @@ def connect(path=None):
 
 def init(conn):
     conn.executescript(SCHEMA)
+    have = {r[1] for r in conn.execute("PRAGMA table_info(listing)")}
+    for col, typ in LISTING_EXTRA.items():
+        if col not in have:
+            conn.execute(f"ALTER TABLE listing ADD COLUMN {col} {typ}")
     have = {r[1] for r in conn.execute("PRAGMA table_info(listing_geo)")}
     for col, typ in GEO_EXTRA.items():
         if col not in have:

@@ -18,7 +18,7 @@ Cada registro (claves exactas; `None` si no hay dato):
 
 | clave | tipo | nota |
 |---|---|---|
-| source | `"fincaraiz"` \| `"metrocuadrado"` | |
+| source | `"fincaraiz"` \| `"metrocuadrado"` \| `"manual"` | |
 | source_id | str | |
 | url | str | absoluta |
 | operation | `"sale"` \| `"rent"` | |
@@ -39,9 +39,26 @@ Cada registro (claves exactas; `None` si no hay dato):
 | features | list[str] | facilidades o características legibles |
 | published_at | `"YYYY-MM-DD"` \| None | |
 
+### Publicaciones manuales (`scraper/manual.py`)
+
+`manual.json` vive en el repo **privado** `Korneas/sic-r7k2-data`; lo editan `web/publicar.html` → `api/manual.js` (Vercel Function
+detrás del HTTP Basic de `middleware.js`; revalida la clave contra env `SITE_PASSWORD`, escribe con env `SIC_DATA_TOKEN` y luego
+dispara `scrape.yml` con `mode=pipeline`). `GET /api/manual?whoami=1` → `{"user": "…"}`.
+`scrape.yml` lo baja a `data/manual.json` (gitignored) con el secret `SIC_DATA_TOKEN`; sin secret o sin archivo no pasa nada.
+
+Es una lista de objetos: `id` (uuid), las claves de arriba (sin `source`, `source_id`, `operation`, `approx_location`,
+`features`, `published_at`), `status` (`"active"` \| `"sold"` \| `"removed"`), `notes` (privadas), `created_at`, `updated_at`,
+`created_by` y `updated_by` (usuario del HTTP Basic, ≤ 60 caracteres; van a las columnas `listing.created_by`/`updated_by`).
+Requeridos: `property_type`, `price`, `area_m2`, `lat`, `lng`, `age_years`, `bedrooms`, `bathrooms` (rangos en `api/manual.js`).
+
+Se ingiere en **todas** las corridas (también `--pipeline-only`), antes del dedupe, con `db.upsert` como
+`source="manual"`, `operation="sale"`, `approx_location=False`, `published_at=created_at`. `sold`/`removed` o ausente del archivo
+→ `status='removed'`. Nunca pasa por `mark_missing` ni por el guard de volumen. **`notes` nunca entra a la DB ni al export**
+(ambos son públicos). En dedupe cada manual es su propio grupo; sí sirve como comparable.
+
 ## 2. SQLite `data/sic.db` (ver PLAN.md §5.3)
 
-Lo dueña `scraper/db.py`. `id = "fr-<source_id>"` \| `"m2-<source_id>"`.
+Lo dueña `scraper/db.py`. `id = "fr-<source_id>"` \| `"m2-<source_id>"` \| `"mn-<uuid>"` (manual).
 
 ## 3. Export web: `web/data/`
 
@@ -65,7 +82,7 @@ Lo dueña `scraper/db.py`. `id = "fr-<source_id>"` \| `"m2-<source_id>"`.
     "img": "https://…jpg",
     "fs": "2026-11-14",                        // primera vez visto
     "pd": -0.05,                               // cambio desde el primer precio (negativo = rebaja); null si no cambió
-    "src": ["fr", "m2"],
+    "src": ["fr", "m2"],                       // mn = publicación manual
     "dom": 12                                  // días en mercado
   }]
 }
@@ -84,6 +101,7 @@ Lo dueña `scraper/db.py`. `id = "fr-<source_id>"` \| `"m2-<source_id>"`.
   "amen": [{"cat": "mall", "name": "Jardín Plaza", "dist": 650}, …],   // las 3 más cercanas por categoría
   "risks": [{"k": "homic", "why": "…"}],
   "projects": [{"k": "renov", "name": "Renovación R2", "dist": 300}],
+  "by": "ana", "by_upd": "beto",   // solo manuales: autor y último editor (by_upd solo si es otro)
   "zone": {"median_m2": 5100000, "trend_12m": 0.07, "dom": 45, "yield": 0.062}
 }}
 ```

@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 
 import yaml
 
-from scraper import db
+from scraper import db, manual
 from scraper.net import Http
 
 PIPELINE = [("dedupe", False), ("geo", False), ("zones", True), ("score", True), ("export", True)]  # (módulo, recibe cfg)
@@ -65,6 +65,7 @@ def main(argv=None):
 
     conn = db.connect()
     db.init(conn)
+    manual.run(conn, now)  # todas las corridas, antes del dedupe; nunca pasa por mark_missing ni el guard
     if args.pipeline_only:
         run_pipeline(conn, cfg)
         return conn.close()

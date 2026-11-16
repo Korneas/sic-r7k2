@@ -36,6 +36,15 @@ jobs:
           M="${{ github.event.inputs.mode }}"
           if [ -z "$M" ]; then [ "${{ github.event.schedule }}" = "0 5 * * *" ] && M=full || M=incremental; fi
           echo "mode=$M" >> "$GITHUB_OUTPUT"
+      # publicaciones manuales (repo privado sic-r7k2-data, ver scraper/manual.py); sin secret o sin archivo se sigue
+      - name: bajar manual.json
+        env: { GH_TOKEN: "${{ secrets.SIC_DATA_TOKEN }}" }
+        run: |
+          if [ -n "$GH_TOKEN" ] && gh api -H "Accept: application/vnd.github.raw" repos/Korneas/sic-r7k2-data/contents/manual.json > /tmp/manual.json; then
+            mv /tmp/manual.json data/manual.json
+          else
+            echo "sin manual.json, se omite"
+          fi
       # sale con error solo si todas las fuentes fallan (GitHub avisa por correo)
       - name: scrape + pipeline
         run: |

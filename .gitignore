@@ -7,3 +7,4 @@ data/raw/
 web/config.js
 data/sic.db
 web/data/
+data/manual.json
