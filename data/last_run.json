@@ -1,11 +1,11 @@
 {
- "generated_at": "2026-11-16T17:24:27Z",
+ "generated_at": "2026-11-16T21:11:06Z",
  "counts": {
-  "sale_active": 17712,
-  "rent_active": 2571,
-  "groups": 14565,
-  "exported": 14497,
-  "scored": 13841,
+  "sale_active": 17717,
+  "rent_active": 2572,
+  "groups": 14610,
+  "exported": 14542,
+  "scored": 13883,
   "no_coords": 68
  },
  "runs": [
