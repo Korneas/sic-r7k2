@@ -1,31 +1,31 @@
 {
- "generated_at": "2026-11-24T16:52:36Z",
+ "generated_at": "2026-11-24T21:22:30Z",
  "counts": {
-  "sale_active": 17852,
-  "rent_active": 2658,
-  "groups": 14778,
-  "exported": 14713,
-  "scored": 14053,
+  "sale_active": 17917,
+  "rent_active": 2691,
+  "groups": 14826,
+  "exported": 14761,
+  "scored": 14097,
   "no_coords": 65
  },
  "runs": [
   {
-   "at": "2026-11-21T13:18:42Z",
+   "at": "2026-11-21T17:50:05Z",
    "source": "m2",
-   "mode": "full",
-   "fetched": 9780,
-   "new": 0,
-   "removed": 223,
+   "mode": "incremental",
+   "fetched": 9774,
+   "new": 14,
+   "removed": 0,
    "errors": 0,
    "ok": true
   },
   {
-   "at": "2026-11-21T13:18:42Z",
+   "at": "2026-11-21T17:50:05Z",
    "source": "fr",
-   "mode": "full",
-   "fetched": 10484,
-   "new": 7,
-   "removed": 94,
+   "mode": "incremental",
+   "fetched": 832,
+   "new": 10,
+   "removed": 0,
    "errors": 0,
    "ok": true
   }
